@@ -1,0 +1,13 @@
+{
+  "_comment": "voicedesign 模式的音色描述（--instruct）。上游示例用英文描述；中文描述的效果待实测。customvoice/clone 见 docs/tts.md。",
+  "voicedesign": {
+    "narrator_male_30": {"label": "男声·沉稳讲解", "instruct": "男声，三十岁左右，沉稳，语速适中，吐字清晰，像科普讲解博主"},
+    "narrator_female_28": {"label": "女声·亲和讲解", "instruct": "女声，二十八岁左右，亲切自然，语速适中，吐字清晰，有专业感"},
+    "energetic_male": {"label": "男声·有活力", "instruct": "男声，二十五岁左右，明亮有活力，语速稍快，语气积极但不夸张"},
+    "calm_female_35": {"label": "女声·温和稳重", "instruct": "女声，三十五岁左右，温和稳重，语速偏慢，适合讲解缺点和注意事项"}
+  },
+  "customvoice": {
+    "_comment": "需要 customvoice 模型（未下载）。音色名以上游模型卡为准，例如 vivian（上游 examples/customvoice.cmd）。",
+    "speakers": ["vivian"]
+  }
+}

@@ -1,0 +1,3 @@
+[submodule "vendor/qwentts.cpp"]
+	path = vendor/qwentts.cpp
+	url = https://github.com/ServeurpersoCom/qwentts.cpp.git

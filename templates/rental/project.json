@@ -1,0 +1,117 @@
+{
+  "_comment": "字段说明见 templates/README.md。所有“待填”必须替换为真实信息，否则 npm run check 不通过。以 _ 开头的键会被忽略。",
+  "schema_version": 1,
+  "id": "",
+  "category": "rental",
+  "title": "待填：视频标题（中文）",
+  "is_example": false,
+  "ai_voice": false,
+  "ad_disclosure": false,
+  "export": {
+    "default_ratio": "4x3",
+    "ratios": [
+      "4x3"
+    ],
+    "fps": 30
+  },
+  "property": {
+    "property_type": "待填：普通住宅/公寓/别墅/商住",
+    "layout": "待填：2室1厅1卫",
+    "area": {
+      "type": "建筑面积",
+      "value": 0,
+      "_comment": "type 只能是 建筑面积 或 套内建筑面积"
+    },
+    "location": {
+      "city": "待填",
+      "district": "待填",
+      "street": "待填：XX街道",
+      "community": "待填：XX小区"
+    },
+    "floor": "待填：中楼层/共18层",
+    "orientation": "待填：南北通透",
+    "decoration": "待填：简装/精装/毛坯",
+    "build_year": null
+  },
+  "price": {
+    "type": "月租金",
+    "value": 0,
+    "unit": "元/月",
+    "valid_until": "待填：YYYY-MM-DD"
+  },
+  "agency": {
+    "full_name": "待填：XX房地产经纪有限公司（营业执照全称）",
+    "record_no": "",
+    "_comment": "record_no：经纪机构备案号，当地要求公示时填写"
+  },
+  "agent": {
+    "name": "待填",
+    "certified_on_camera": false,
+    "_comment": "主要出镜人为视频号房产职业认证本人时改为 true"
+  },
+  "highlights": [
+    "待填：亮点（客观描述，不用绝对化用语）"
+  ],
+  "drawbacks": [
+    "待填：至少一条缺点（采光/噪音/楼龄/配套等）"
+  ],
+  "nearby": [
+    {
+      "name": "待填：XX地铁站",
+      "distance_m": 0,
+      "basis": "地图测距",
+      "status": "已建成",
+      "_comment": "只写客观距离，不写“X分钟到”；status：已建成/在建/规划中"
+    }
+  ],
+  "tts": {
+    "voice": "narrator_male_30",
+    "mode": "voicedesign"
+  },
+  "narration": {
+    "_comment": "presenter: fullscreen | pip-left | pip-right；card 可选（信息卡）；presenter_clip 可选（raw/ 下口播视频，相对项目目录）；clip_start 秒",
+    "segments": [
+      {
+        "id": "s01",
+        "text": "待填：开场钩子（先说价值点或问题）",
+        "presenter": "fullscreen"
+      },
+      {
+        "id": "s02",
+        "text": "待填：房源基本信息",
+        "presenter": "pip-right",
+        "card": {
+          "title": "待填",
+          "lines": [
+            "待填"
+          ]
+        }
+      },
+      {
+        "id": "s03",
+        "text": "待填：讲解主体",
+        "presenter": "pip-left"
+      },
+      {
+        "id": "s04",
+        "text": "待填：需要注意的缺点",
+        "presenter": "fullscreen"
+      },
+      {
+        "id": "s05",
+        "text": "待填：总结适合人群，点击下方组件预约看房",
+        "presenter": "fullscreen"
+      }
+    ]
+  },
+  "rental": {
+    "rent_type": "整租",
+    "room_desc": "",
+    "payment_terms": "待填：押一付三",
+    "service_fee": "待填：如 无/半个月租金",
+    "utilities": "待填：民水民电/商水商电",
+    "available_from": "待填：YYYY-MM-DD",
+    "min_lease_months": 12,
+    "_comment": "rent_type：整租/合租；合租须填 room_desc（出租哪间、面积口径）"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "resale.json",
+  "title": "Resale (二手房) project",
+  "allOf": [{"$ref": "common.json"}],
+  "type": "object",
+  "required": ["resale"],
+  "properties": {
+    "category": {"const": "resale"},
+    "resale": {
+      "type": "object",
+      "required": ["verification_code", "owner_consent"],
+      "properties": {
+        "verification_code": {"type": "string", "minLength": 4},
+        "owner_consent": {"const": true},
+        "property_right": {"type": "string"},
+        "ownership_note": {"type": "string"}
+      }
+    }
+  }
+}

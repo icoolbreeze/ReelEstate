@@ -1,0 +1,19 @@
+{
+  "name": "reelestate",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ReelEstate: real-estate explainer videos (Remotion + Python pipeline) for Douyin / WeChat Channels",
+  "scripts": {
+    "new": "python pipeline/new_project.py",
+    "tts": "python pipeline/tts/qwen_tts.py",
+    "check": "python pipeline/check/check.py",
+    "render": "python pipeline/render.py",
+    "still": "python pipeline/render.py --still",
+    "preview": "python pipeline/preview.py",
+    "setup": "npm --prefix remotion install",
+    "typecheck": "npm --prefix remotion run typecheck"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

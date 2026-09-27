@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "new-home.json",
+  "title": "New home (新房) project",
+  "allOf": [{"$ref": "common.json"}],
+  "type": "object",
+  "required": ["new_home"],
+  "properties": {
+    "category": {"const": "new-home"},
+    "new_home": {
+      "type": "object",
+      "required": ["developer_full_name", "presale_permit_no"],
+      "properties": {
+        "project_name": {"type": "string"},
+        "developer_full_name": {"type": "string", "minLength": 6, "pattern": "公司$"},
+        "presale_permit_no": {"type": "string", "minLength": 4},
+        "delivery_date": {"type": "string"},
+        "delivery_standard": {"type": "string"},
+        "renderings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["file", "label"],
+            "properties": {
+              "file": {"type": "string"},
+              "label": {"type": "string", "pattern": "(效果图|非实景)"}
+            }
+          }
+        },
+        "planned_facilities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "status"],
+            "properties": {
+              "name": {"type": "string"},
+              "status": {"enum": ["已建成", "在建", "规划中"]}
+            }
+          }
+        }
+      }
+    }
+  }
+}
