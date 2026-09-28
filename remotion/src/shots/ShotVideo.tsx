@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Audio, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
 import { EFFECTS, resolveEffects, type EffectId, type ResolvedEffects } from "../effects";
+import { zonesFor } from "../effects/kit";
 import type { InfoField } from "../shared/InfoBar";
 import { buildTimeline } from "../shared/timeline";
 import { ensureFonts } from "../styles/fonts";
@@ -50,7 +51,8 @@ const EffectLayer: React.FC<{ id?: EffectId; it: ShotItem; project: Project; st:
   const e = id ? EFFECTS[id] : undefined;
   if (!e || e.kind !== "shot") return null;
   const C = e.component;
-  return <C st={st} project={project} shot={it.shot} duration={it.duration} />;
+  const pip = it.shot.presenter === "pip-left" || it.shot.presenter === "pip-right" ? it.shot.presenter : undefined;
+  return <C st={st} project={project} shot={it.shot} duration={it.duration} zones={zonesFor(st, pip)} />;
 };
 
 const TransitionLayer: React.FC<{ id?: EffectId; it: ShotItem; st: StyleTokens }> = ({ id, it, st }) => {
@@ -83,7 +85,11 @@ const ShotScene: React.FC<{ it: ShotItem; project: Project; st: StyleTokens; fx:
     if (fullPresenter && clip) return <StylePresenter clip={clip} mode="fullscreen" st={st} startFrom={it.from} />;
     if (shot.media) {
       const dim = shot.type === "spec" ? 0.42 : shot.type === "number" ? 0.55 : 0;
-      return <Media file={shot.media} st={st} push={shot.push} dim={dim} />;
+      const media = <Media file={shot.media} st={st} push={shot.push} dim={dim} />;
+      if (shot.push) return media;
+      // video-taste §7.4: no fully static window ≥0.8 s. Un-pushed stills get a barely-there hold drift (≤2.5 %).
+      const drift = 1 + 0.025 * (f / Math.max(1, it.duration));
+      return <AbsoluteFill style={{ transform: `scale(${drift})`, transformOrigin: "50% 45%" }}>{media}</AbsoluteFill>;
     }
     return <AbsoluteFill style={{ backgroundColor: st.dark }} />;
   })();

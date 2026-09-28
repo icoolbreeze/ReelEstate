@@ -4,6 +4,9 @@ import type { StyleTokens } from "../styles/types";
 import type { RoomInfo } from "../types";
 import { E, pop, seg, typed, W } from "./util";
 
+/** Conservative width of a Latin label in em (caps/digits ≈0.74 em in Montserrat 500, space 0.3 em). */
+const estimateLabelWidth = (t: string) => [...t].reduce((w, c) => w + (c === " " ? 0.3 : /[A-Z0-9]/.test(c) ? 0.74 : /[\u3000-\u9fff]/.test(c) ? 1 : 0.6), 0);
+
 /**
  * Space-tour room card (MediaStorm F-type "前厅 Lobby"), measured timeline from the hard cut (frame 0):
  * f10 filled dot pops in 4 frames (ease-out-back) · f16-18 outline dots · f24-26 Chinese name wipes in ·
@@ -50,9 +53,12 @@ export const RoomCard: React.FC<{ room: RoomInfo; st: StyleTokens; y?: number }>
 
   const wipe = seg(f, 24, spring ? 30 : 26, E.outCubic); // 2-3 frame wipe
   const pillK = seg(f, 30, 36, E.outCubic);
-  const pillText = typed(room.pill ?? "", f, 32, 1);
+  const pillText = typed(room.pill ?? "", f, 32, 2); // 2 chars/frame: full label within ~5 f of the pill opening
   const enK = seg(f, 45, 50, E.outCubic);
-  const pillW = room.pill ? 60 + [...room.pill].length * 38 : 0;
+  // Pill sizes to its full text (never clips): width is laid out by an invisible copy of the whole label,
+  // the typed text overlays it. The font auto-shrinks so the pill fits the space right of the dots.
+  const pillMax = Math.max(160, blockW - (total * 110 + 30));
+  const pillFont = room.pill ? Math.min(58, Math.floor((pillMax - 64) / estimateLabelWidth(room.pill))) : 58;
 
   return (
     <div style={{ position: "absolute", left, top, width: blockW, height: 400 }}>
@@ -67,7 +73,6 @@ export const RoomCard: React.FC<{ room: RoomInfo; st: StyleTokens; y?: number }>
               left: total * 110 + 30,
               top: 0,
               height: 94,
-              width: pillW,
               borderRadius: 47,
               boxSizing: "border-box",
               border: `3px solid ${st.accent}`,
@@ -76,17 +81,18 @@ export const RoomCard: React.FC<{ room: RoomInfo; st: StyleTokens; y?: number }>
               opacity: pillK > 0 ? 1 : 0,
               display: "flex",
               alignItems: "center",
-              paddingLeft: 30,
+              padding: "0 30px",
               fontFamily: st.fonts.latin,
               fontWeight: 500,
-              fontSize: 58,
+              fontSize: pillFont,
               letterSpacing: 1,
               color: st.text,
               whiteSpace: "nowrap",
               textShadow: st.textGlow,
             }}
           >
-            {pillText}
+            <span style={{ visibility: "hidden" }}>{room.pill}</span>
+            <span style={{ position: "absolute", left: 30, top: 0, lineHeight: "88px" }}>{pillText}</span>
           </div>
         ) : null}
       </div>

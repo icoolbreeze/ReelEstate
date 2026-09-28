@@ -56,3 +56,13 @@ npm run effects -- projects/rental/<id> --force         # re-derive (same seed �
 ## Remotion
 
 Ports live in `remotion/src/effects/`. They take `StyleTokens` (colors/fonts/motion) — never the original demo skins.
+
+## Layout & taste rules (video-taste)
+
+Every effect follows the shared video-taste skill (`/home/box/agent-data/workflows/video-taste/SKILL.md`):
+
+- **Zones**: `ShotVideo` passes `zones` (caption band y 780–1000, PiP box from the style's `pip` tokens, action-safe 48 px). Readable effect content ends above `CONTENT_BOTTOM` (760) and clears the PiP by 24 px (`bottomLimit()`); openers and the CTA lockup sit in the title-safe top band (≥88 px top / 96 px sides), clear of the presenter's face.
+- **One label family**: `chip()` / `card()` (scene-tinted dark material, radius 10 / 14, tinted shadow) for every info label; `slab()` (accent fill, auto off-black/off-white ink via `onColor()`) is the single hero exception.
+- **Text hygiene**: `clean()` strips em/en-dash separators; `dotLines()` splits at top-level `·` so each line carries ≤1 middle dot; long strings shrink with `fitFont()` instead of clipping.
+- **Colour**: `ink()` = off-white `#FBFBF8` / off-black `#141214` (never pure #fff/#000); shadows tinted with `st.dark`; soft `scrim()` behind light text on footage.
+- **Motion**: staggers keep ≤3 units moving (≤5 animators incl. camera); overshoot ≤12 %; no perpetual loops; after settling, blocks drift slowly and un-pushed stills get a ≤2.5 % hold drift so no window is static ≥0.8 s.

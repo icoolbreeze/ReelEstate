@@ -3,6 +3,7 @@
 // to ReelEstate style tokens. SPDX-License-Identifier: Apache-2.0
 import type { StyleTokens } from "../styles/types";
 import type { Project, Shot } from "../types";
+import type { Zones } from "./kit";
 
 export type EffectPool =
   | "opener"
@@ -54,7 +55,8 @@ export type EffectsDoc = {
   selections?: EffectSelection[];
 };
 
-export type EffectProps = { st: StyleTokens; project: Project; shot: Shot; duration: number };
+/** zones = caption band + PiP box + action-safe rect; effects must keep readable content out of caption/PiP. */
+export type EffectProps = { st: StyleTokens; project: Project; shot: Shot; duration: number; zones: Zones };
 export type TransitionProps = { st: StyleTokens; duration: number };
 
 /** Which built-in shot component an effect replaces (the rest are additive layers). */
