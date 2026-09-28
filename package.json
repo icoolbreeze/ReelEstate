@@ -11,7 +11,15 @@
     "still": "python pipeline/render.py --still",
     "preview": "python pipeline/preview.py",
     "setup": "npm --prefix remotion install",
-    "typecheck": "npm --prefix remotion run typecheck"
+    "typecheck": "npm --prefix remotion run typecheck",
+    "make": "python pipeline/make.py",
+    "stage": "python pipeline/make.py --project",
+    "listing:fetch": "python pipeline/make.py --only listing:fetch --project",
+    "listing:wall": "python pipeline/make.py --only listing:wall --project",
+    "map:fetch": "python pipeline/make.py --only map:fetch --project",
+    "assets:import": "python pipeline/make.py --only assets:import --project",
+    "script": "python pipeline/make.py --only script --project",
+    "voice": "python pipeline/make.py --only tts --project"
   },
   "engines": {
     "node": ">=20"

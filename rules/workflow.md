@@ -1,5 +1,19 @@
 # 标准流程
 
+## 0. 一句话成片（推荐）
+
+```powershell
+npm run make -- "帮我做一条云栖苑两室整租的视频，4800左右，影视飓风风格"
+# 缺信息时会列出问题（退出码 3）→ 问用户 → 回填后重跑同一项目：
+npm run make -- --project projects/rental/<id> --answer listing.pick=c03 --answer confirm.consent.owner
+```
+
+阶段：parse → listing:fetch → listing:wall → map:fetch → assets:import → script → tts → check → render。
+每个阶段幂等、可单独重跑（`npm run map:fetch -- projects/rental/<id> --force`）。
+script 阶段的兜底稿只是骨架：**Agent 必须按 `rules/style/<preset>.md` 重写口播与 `shots.json`**，并保证与近期视频不同。
+详细说明见 `docs/one-sentence-workflow.md` 与 AGENTS.md §3A–3C。下面是手工流程（仍然有效）。
+
+
 ```
 new → 素材放入 raw/ → ASR 转写（占位）→ 写口播分段 → TTS（可选）→ check → render → 发布前自检
 ```
@@ -67,6 +81,8 @@ render 会先运行 check，不通过则拒绝渲染。输出 `output/<id>_<rati
 6. 讲了缺点？与近期视频脚本和表现形式明显不同？只在一个账号发布？
 7. **用了 AI 配音/AI 画面 → 发布时勾选 AI 标注**（抖音：高级设置 → 自主声明 → 内容由AI生成；视频号：添加标注 → 含AI生成内容），并有本人书面授权？
 8. **收费推广/商单 → 显著标注“广告”**；抖音商单走星图？
-9. BGM 来自平台曲库或有许可记录；字体可商用？
+9. BGM 来自平台曲库或有许可记录；字体可商用？`assets/manifest.json` 每项都有来源/许可、无水印？
+9a. 地图画面有图源署名；距离写“约 N 米 · 直线距离”并有来源？AI 素材只用于装饰/转场并标“AI生成”？
+9b. 列表墙里其他房源已虚化或都有委托？画面无 CRM 编号/平台水印/经纪人姓名？
 10. 主要出镜人是视频号认证经纪人本人？画面无黑边、清晰，标题与内容一致？
 11. 挂合规留资组件（视频号留资组件/企微获客助手；抖音线索小程序），CTA 不写“私信领资料”？

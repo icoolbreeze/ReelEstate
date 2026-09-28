@@ -18,7 +18,7 @@ export type Segment = {
 
 export type AudioSegment = { id: string; text: string; file: string; duration: number | null };
 
-export type Project = {
+export type Project = RenderExtras & {
   schema_version?: number;
   id: string;
   category: Category;
@@ -55,4 +55,64 @@ export type Project = {
     renderings?: { file: string; label: string }[];
     planned_facilities?: { name: string; status: string }[];
   };
+};
+
+// ---- v5: one-sentence workflow (shots.json-driven rendering) ----
+// Mirrors pipeline/schema/shots.json + fields injected by pipeline/render.py.
+export type StyleName = "qiuzhi" | "mediastorm";
+export type ShotPresenter = PresenterMode | "none";
+export type ShotType = "presenter" | "wall" | "map" | "room" | "broll" | "spec" | "number" | "outro";
+
+export type RoomInfo = { zh: string; en?: string; pill?: string; index?: number; total?: number };
+export type SpecInfo = { title: string; lines: string[]; variant?: "default" | "warning" };
+export type LocationInfo = { main: string; sub?: string };
+export type NumberInfo = { value: string; unit?: string; caption?: string; over?: boolean };
+
+export type Shot = {
+  id: string;
+  segment: string; // narration segment id; segment duration is split across its shots by weight
+  weight?: number;
+  type: ShotType;
+  presenter?: ShotPresenter;
+  media?: string; // image/video relative to project dir
+  locator?: string; // floorplan room key to highlight
+  push?: boolean; // slow push-in on media
+  room?: RoomInfo;
+  spec?: SpecInfo;
+  location?: LocationInfo;
+  number?: NumberInfo;
+  cta?: string;
+};
+
+export type FloorplanRoom = { key: string; zh: string; x: number; y: number; w: number; h: number };
+export type ShotsDoc = {
+  style?: StyleName;
+  generated_by?: string;
+  shots: Shot[];
+  floorplan?: { schematic?: boolean; rooms: FloorplanRoom[] };
+};
+
+export type WallCard = {
+  id: string;
+  cover?: string;
+  community: string;
+  layout?: string;
+  area?: string;
+  rent?: string;
+  orientation?: string;
+  floor?: string;
+};
+export type WallDoc = { cards: WallCard[]; picked: string | null; blur_others?: boolean };
+
+export type MediaInfo = { file: string; ai?: boolean; source_tag?: string; attribution?: string };
+
+export type RenderExtras = {
+  style?: StyleName;
+  shots?: ShotsDoc;
+  wall?: WallDoc;
+  media?: Record<string, MediaInfo>; // keyed by relative file path (from assets/manifest.json)
+  presenter_clip?: string; // default talking-head clip for presenter shots
+  bgm?: string;
+  sfx?: Record<string, string>;
+  map?: { image: string; attribution: string };
 };

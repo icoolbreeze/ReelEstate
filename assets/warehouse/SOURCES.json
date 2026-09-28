@@ -1,0 +1,65 @@
+{
+  "_comment": "本地素材库来源清单。媒体文件不入库（.gitignore），换机器需按此清单重新下载。",
+  "items": [
+    {
+      "file": "interiors/living.jpg",
+      "license": "CC0",
+      "source": "wikimedia/unsplash",
+      "attribution": "Jarosław Ceborski / Unsplash via Wikimedia Commons"
+    },
+    {
+      "file": "interiors/bedroom.jpg",
+      "license": "CC0",
+      "source": "wikimedia/unsplash",
+      "attribution": "Gabriel Beaudry / Unsplash via Wikimedia Commons"
+    },
+    {
+      "file": "interiors/kitchen.jpg",
+      "license": "CC0",
+      "source": "wikimedia/unsplash",
+      "attribution": "Naomi Hébert / Unsplash via Wikimedia Commons"
+    },
+    {
+      "file": "exteriors/highrise.jpg",
+      "license": "CC0",
+      "source": "wikimedia/unsplash",
+      "attribution": "Jimmy Chang / Unsplash via Wikimedia Commons"
+    },
+    {
+      "file": "exteriors/balconies.jpg",
+      "license": "CC0",
+      "source": "wikimedia/unsplash",
+      "attribution": "Naomi Hutchinson / Unsplash via Wikimedia Commons"
+    },
+    {
+      "file": "presenter/presenter.mp4",
+      "license": "Pexels License",
+      "source": "pexels",
+      "attribution": "cottonbro studio / Pexels #6963825"
+    },
+    {
+      "file": "audio/bgm.mp3",
+      "license": "Mixkit Free License",
+      "source": "mixkit",
+      "attribution": "Mixkit Sweet September (#282)"
+    },
+    {
+      "file": "audio/whoosh.mp3",
+      "license": "Mixkit Free License",
+      "source": "mixkit",
+      "attribution": "Mixkit swoosh-quick (#166)"
+    },
+    {
+      "file": "audio/click.mp3",
+      "license": "Mixkit Free License",
+      "source": "mixkit",
+      "attribution": "Mixkit switch-click-quick (#2582)"
+    },
+    {
+      "file": "covers/cover01.jpg … cover09.jpg",
+      "license": "CC0",
+      "source": "wikimedia/unsplash",
+      "attribution": "Unsplash 作者经 Wikimedia Commons 收录（含 NeONBRAND、Markus Spiske、Jolene Hardy、chuttersnap、Grant Lemons 等）；逐张作者映射未保留，公开发布前如需署名请重新核对"
+    }
+  ]
+}

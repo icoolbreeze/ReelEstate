@@ -5,7 +5,7 @@
   "category": "resale",
   "title": "【示例数据】云栖小区三房实拍讲解：98㎡的动线怎么设计",
   "is_example": true,
-  "ai_voice": false,
+  "ai_voice": true,
   "ad_disclosure": false,
   "export": {
     "default_ratio": "4x3",
@@ -129,5 +129,6 @@
     "owner_consent": true,
     "property_right": "70年产权 商品房",
     "ownership_note": "示例：满五年，以权属证书为准"
-  }
+  },
+  "style": "qiuzhi"
 }

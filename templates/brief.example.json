@@ -1,0 +1,66 @@
+{
+  "sentence": "帮我做一条示例云栖苑两室整租的视频，4800元左右，影视飓风风格",
+  "created_at": "2026-09-28T06:18:28-07:00",
+  "slug": "auto-64f006",
+  "category": "rental",
+  "style": "mediastorm",
+  "ratio": "4x3",
+  "listing": {
+    "source": "mock",
+    "listing_id": null,
+    "community_keyword": "示例云栖苑",
+    "city": null,
+    "filters": {
+      "rooms": [
+        2
+      ],
+      "monthly_rent_yuan": {
+        "min": 4080,
+        "max": 5520
+      },
+      "total_price_wan": null,
+      "area_sqm": null,
+      "orientations": [],
+      "scope": "all"
+    },
+    "pick": "MOCK-RENTAL-20260928-001"
+  },
+  "voice": {
+    "mode": "edge",
+    "edge_voice": "zh-CN-YunxiNeural",
+    "rate": "+15%"
+  },
+  "flova": {
+    "allowed": false,
+    "credit_budget": 0
+  },
+  "photos": {
+    "exclude": []
+  },
+  "platform": [
+    "douyin",
+    "channels"
+  ],
+  "map": {
+    "query": null,
+    "city": null,
+    "source": "amap"
+  },
+  "answers": {
+    "_confirmed": [
+      "category",
+      "consent.owner",
+      "disclosures",
+      "flova",
+      "listing.pick",
+      "listing.target",
+      "photos.exclude",
+      "platform",
+      "style",
+      "voice.mode"
+    ]
+  },
+  "questions": [],
+  "project_id": "2026-09-28-auto-64f006",
+  "_comment": "make.py 第 0 步生成；缺项会在终端列出问题。可手工编辑后重跑。"
+}

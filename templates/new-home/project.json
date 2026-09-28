@@ -123,5 +123,6 @@
       }
     ],
     "_comment": "renderings.label 必须含“效果图”或“非实景”；planned_facilities.status：已建成/在建/规划中"
-  }
+  },
+  "style": "qiuzhi"
 }

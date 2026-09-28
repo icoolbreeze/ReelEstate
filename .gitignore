@@ -50,8 +50,18 @@ output/
 /vendor/qwentts.cpp/build/
 /vendor/qwentts.cpp/models/*.gguf
 
+# ---- 第三方 skill 参考克隆（本地使用，不入库）----
+/vendor/video-shotcraft/
+/vendor/video-talkcraft/
+
 # ---- 系统杂项 ----
 .DS_Store
 Thumbs.db
 desktop.ini
 *.log
+
+# ---- 本地素材库：媒体文件不入库，只提交说明与来源清单 ----
+/assets/warehouse/**
+!/assets/warehouse/
+!/assets/warehouse/README.md
+!/assets/warehouse/SOURCES.json

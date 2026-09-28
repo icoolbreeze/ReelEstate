@@ -8,6 +8,7 @@ import { InfoCard } from "./InfoCard";
 import { PresenterFrame } from "./PresenterFrame";
 import { BG, FONT_FAMILY, MUTED } from "./theme";
 import { buildTimeline, type TimelineItem } from "./timeline";
+import { ShotVideo } from "../shots/ShotVideo";
 
 const isVideo = (f: string) => /\.(mp4|mov|webm|mkv)$/i.test(f);
 
@@ -25,7 +26,7 @@ const Backdrop: React.FC<{ item: TimelineItem; accent: string }> = ({ item, acce
   return (
     <AbsoluteFill
       style={{
-        background: `linear-gradient(135deg, ${BG} 0%, #1a2230 60%, ${accent}33 100%)`,
+        background: `linear-gradient(135deg, ${BG} 0%, #E7ECF6 60%, ${accent}1F 100%)`,
         alignItems: "center",
         justifyContent: "center",
         fontFamily: FONT_FAMILY,
@@ -41,16 +42,28 @@ const Backdrop: React.FC<{ item: TimelineItem; accent: string }> = ({ item, acce
 const SegmentScene: React.FC<{ item: TimelineItem; accent: string }> = ({ item, accent }) => {
   const { seg } = item;
   const full = seg.presenter === "fullscreen";
-  const cardSide = seg.presenter === "pip-left" ? "right" : seg.presenter === "pip-right" ? "left" : "right";
+  const hasClip = typeof seg.presenter_clip === "string" && seg.presenter_clip.length > 0;
+  // Fullscreen with a clip: person fills the frame, card on the right.
+  // Fullscreen without a clip: backdrop, card centered.
+  // PiP: backdrop always; pip-left card on the right, pip-right card on the left.
+  const cardSide: "left" | "right" | "center" = full
+    ? hasClip
+      ? "right"
+      : "center"
+    : seg.presenter === "pip-left"
+      ? "right"
+      : "left";
   return (
     <AbsoluteFill>
-      {full ? (
+      {full && hasClip ? (
         <PresenterFrame mode="fullscreen" clip={seg.presenter_clip} clipStart={seg.clip_start} accent={accent} />
       ) : (
         <Backdrop item={item} accent={accent} />
       )}
-      {seg.card ? <InfoCard card={seg.card} accent={accent} side={full ? "right" : cardSide} /> : null}
-      {!full ? <PresenterFrame mode={seg.presenter} clip={seg.presenter_clip} clipStart={seg.clip_start} accent={accent} /> : null}
+      {seg.card ? <InfoCard card={seg.card} accent={accent} side={cardSide} /> : null}
+      {!full && hasClip ? (
+        <PresenterFrame mode={seg.presenter} clip={seg.presenter_clip} clipStart={seg.clip_start} accent={accent} />
+      ) : null}
       <Captions text={seg.text} />
       {item.audio?.file ? <Audio src={staticFile(item.audio.file)} /> : null}
     </AbsoluteFill>
@@ -63,6 +76,8 @@ type Props = { project: Project; accent: string; fields: InfoField[] };
 export const BaseLayout: React.FC<Props> = ({ project, accent, fields }) => {
   const { fps } = useVideoConfig();
   const timeline = buildTimeline(project, fps);
+  // v5: when pipeline/render.py injects shots.json, render the styled shot timeline instead.
+  if (project.shots?.shots?.length) return <ShotVideo project={project} fields={fields} />;
   return (
     <AbsoluteFill style={{ backgroundColor: BG }}>
       {timeline.map((item) => (

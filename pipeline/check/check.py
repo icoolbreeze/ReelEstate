@@ -137,12 +137,13 @@ def load_banned() -> dict:
     return load_json(BANNED_FILE)
 
 
-def check_words(p: dict, r: Report) -> None:
+def check_words(p: dict, r: Report, extra: list[tuple[str, str]] | None = None) -> None:
     sec = "违禁用语"
     banned = load_banned()
     allow = banned.get("allow", [])
     hits = 0
-    for path, key, text in iter_strings(p):
+    items = [(path, key, text) for path, key, text in iter_strings(p)] + [(path, "text", text) for path, text in (extra or [])]
+    for path, key, text in items:
         if key in ID_KEYS:
             continue
         scan = text
@@ -291,6 +292,156 @@ def publish_todos(p: dict, r: Report, project_dir: Path) -> None:
         r.warn("示例", "这是示例数据（is_example=true），不得发布")
 
 
+# Extra PII / CRM leakage patterns (on top of CONTACT_PATTERNS): exact floor / unit / room numbers,
+# detailed addresses, CRM ids and ke.com / lianjia links or logos, personal names with titles.
+PII_PATTERNS = [
+    (r"(?<!\d)\d{1,3}\s*(?:栋|幢|座|号楼)", "楼栋号"),
+    (r"(?<!\d)\d{1,2}\s*单元", "单元号"),
+    (r"(?<!\d)\d{3,4}\s*(?:室|号房)", "房号"),
+    (r"(?<!\d)\d{1,3}-\d{1,2}-\d{3,4}(?!\d)", "楼栋-单元-房号"),
+    (r"[\u4e00-\u9fa5]{2,}(?:路|街|大道|巷|弄)\d{1,5}号", "详细门牌地址"),
+    (r"(?<![共\d])\d{1,2}\s*/\s*\d{1,2}\s*层?", "精确楼层"),
+    (r"(?<![共\d])第\s*\d{1,2}\s*层", "精确楼层"),
+    (r"(?<!\d)\d{10,}(?!\d)", "CRM 房源编号/长数字 ID"),
+    (r"(?i)ke\.com|lianjia|ljcdn|beike|贝壳|链家|自如|我爱我家", "贝壳/链家等平台名称或链接"),
+    (r"[\u4e00-\u9fa5](?:先生|女士|小姐)(?![\u4e00-\u9fa5])", "姓氏+称谓（可能是业主/房东姓名）"),
+    (r"(?:业主|房东|租客)[\u4e00-\u9fa5]{0,2}[:：]\s*[\u4e00-\u9fa5]{2,3}", "业主/房东姓名"),
+]
+TEXT_KEYS_SHOTS = {"zh", "en", "pill", "title", "lines", "main", "sub", "caption", "value", "unit", "cta"}
+TEXT_KEYS_WALL = {"community", "layout", "area", "rent", "orientation", "floor"}
+
+
+def rendered_texts(project_dir: Path) -> list[tuple[str, str]]:
+    """Every string that can appear on screen from shots.json / wall.json (project.json is scanned separately)."""
+    out: list[tuple[str, str]] = []
+    shots_p = project_dir / "shots.json"
+    if shots_p.exists():
+        doc = load_json(shots_p)
+        for path, key, text in iter_strings({"shots": doc.get("shots", []), "floorplan": doc.get("floorplan", {})}, "shots.json"):
+            if key in TEXT_KEYS_SHOTS or key == "zh":
+                out.append((path, text))
+    wall_p = project_dir / "wall.json"
+    if wall_p.exists():
+        for path, key, text in iter_strings({"cards": load_json(wall_p).get("cards", [])}, "wall.json"):
+            if key in TEXT_KEYS_WALL:
+                out.append((path, text))
+    return out
+
+
+def check_pii(p: dict, r: Report, project_dir: Path) -> None:
+    sec = "隐私/PII"
+    hits = 0
+    texts = [(path, text) for path, key, text in iter_strings(p) if key not in ID_KEYS and key != "name"]
+    texts += rendered_texts(project_dir)
+    needles: list[str] = []
+    listing_p = project_dir / "listing.json"
+    if listing_p.exists():
+        lid = str(load_json(listing_p).get("listing_id") or "")
+        if len(lid) >= 6:
+            needles.append(lid)
+    wc_p = project_dir / "wall_candidates.json"
+    if wc_p.exists():
+        for it in load_json(wc_p).get("items") or []:
+            lid = str(it.get("listing_id") or "")
+            if len(lid) >= 6:
+                needles.append(lid)
+    for path, text in texts:
+        for rx, label in PII_PATTERNS + CONTACT_PATTERNS:
+            m = re.search(rx, text)
+            if m:
+                hits += 1
+                r.fail(sec, f"{path} 疑似{label}“{m.group(0)}”：{text}")
+        for n in needles:
+            if n in text:
+                hits += 1
+                r.fail(sec, f"{path} 含 CRM 房源编号“{n}”：{text}")
+    # wall.json must not carry CRM ids at all (Remotion props are not private)
+    wall_p = project_dir / "wall.json"
+    if wall_p.exists():
+        raw = wall_p.read_text(encoding="utf-8")
+        for n in needles:
+            if n in raw:
+                hits += 1
+                r.fail(sec, f"wall.json 含 CRM 房源编号 {n}（CRM id 只能留在 listing.json / wall_candidates.json）")
+                break
+    if not hits:
+        r.ok(sec, "未发现电话/微信/姓名、精确楼层、楼栋单元房号、详细门牌、CRM 编号、贝壳链家字样")
+
+
+def check_assets(p: dict, r: Report, project_dir: Path) -> None:
+    sec = "素材清单"
+    man_p = project_dir / "assets" / "manifest.json"
+    if not man_p.exists():
+        # Legacy projects without the one-sentence workflow are allowed to skip.
+        if (project_dir / "shots.json").exists() or (project_dir / "brief.json").exists():
+            r.fail(sec, "缺少 assets/manifest.json（一句话成片必须记录每个素材的来源/许可/AI/水印）")
+        return
+    man = load_json(man_p)
+    assets = man.get("assets") or []
+    by_file = {a.get("file"): a for a in assets if a.get("file")}
+    # Every media referenced by shots / wall / map / presenter must be listed.
+    needed: set[str] = set()
+    shots_p = project_dir / "shots.json"
+    if shots_p.exists():
+        for sh in (load_json(shots_p).get("shots") or []):
+            if sh.get("media"):
+                needed.add(sh["media"])
+    wall_p = project_dir / "wall.json"
+    if wall_p.exists():
+        for c in (load_json(wall_p).get("cards") or []):
+            if c.get("cover"):
+                needed.add(c["cover"])
+    for name in ("map/satellite_4x3.jpg", "map/static.png", "raw/presenter.mp4", "audio/bgm.mp3"):
+        if (project_dir / name).exists():
+            needed.add(name)
+    missing = sorted(n for n in needed if n not in by_file)
+    for m in missing:
+        r.fail(sec, f"素材未入清单：{m}")
+    wm = [a["file"] for a in assets if a.get("watermarked") is True]
+    for f in wm:
+        r.fail(sec, f"素材带水印，禁止使用（去水印也不行）：{f}")
+    required = ("file", "source", "license", "ai", "watermarked")
+    for a in assets:
+        lack = [k for k in required if a.get(k) in (None, "", "unknown")]
+        if lack and a.get("file") in needed:
+            r.fail(sec, f"{a.get('file')} 缺少字段 {', '.join(lack)}（来源/许可/AI/水印必须写清）")
+        if a.get("ai") is True:
+            if not a.get("model") or not a.get("prompt"):
+                r.fail(sec, f"{a.get('file')} 是 AI 素材，必须记录 model 与 prompt")
+            if a.get("usage") not in ("decorative", "transition"):
+                r.fail(sec, f"{a.get('file')} 是 AI 素材，usage 只能是 decorative/transition（不得用于户型/实景/景观/周边）")
+    if not missing and not wm:
+        r.ok(sec, f"素材清单 {len(assets)} 条，引用文件均已登记且无水印")
+    if any(a.get("ai") for a in assets):
+        r.todo("发布时手动", "含 AI 生成画面：发布时勾选 AI 标注，并确认画面已打“AI生成”角标")
+
+
+def check_map(p: dict, r: Report, project_dir: Path) -> None:
+    sec = "地图归属"
+    geo_p = project_dir / "map" / "geo.json"
+    if not geo_p.exists():
+        return
+    geo = load_json(geo_p)
+    attr = geo.get("attribution") or ""
+    if not attr or "高德" not in attr and "地图" not in attr:
+        r.fail(sec, "map/geo.json 缺少可见的地图归属说明（attribution）")
+    else:
+        r.ok(sec, f"地图归属：{attr}")
+    if not (project_dir / "map" / "satellite_4x3.jpg").exists():
+        r.warn(sec, "缺少 map/satellite_4x3.jpg")
+
+
+def check_style(p: dict, r: Report) -> None:
+    sec = "风格"
+    style = p.get("style")
+    if style in (None, ""):
+        r.warn(sec, "未设置 style（qiuzhi / mediastorm）；将回退为 qiuzhi")
+    elif style not in ("qiuzhi", "mediastorm"):
+        r.fail(sec, f"未知 style：{style}（应为 qiuzhi 或 mediastorm）")
+    else:
+        r.ok(sec, f"风格：{style}")
+
+
 def run(project_dir: Path) -> Report:
     r = Report()
     raw = load_json(project_dir / "project.json")
@@ -308,10 +459,14 @@ def run(project_dir: Path) -> Report:
     check_placeholders(p, r)
     check_mandatory(p, r, project_dir)
     check_category(p, r, project_dir)
-    check_words(p, r)
+    check_words(p, r, rendered_texts(project_dir))
     check_contacts(p, r)
+    check_pii(p, r, project_dir)
+    check_style(p, r)
     check_nearby(p, r)
     check_media(p, r, project_dir)
+    check_assets(p, r, project_dir)
+    check_map(p, r, project_dir)
     publish_todos(p, r, project_dir)
     return r
 

@@ -28,6 +28,44 @@ def build_props(project_dir: Path) -> dict:
     props["audio"] = load_json(seg_json) if seg_json.exists() else []
     if props["audio"]:
         props["ai_voice"] = True
+    # v5 one-sentence extras (optional; BaseLayout falls back to the legacy timeline when absent)
+    shots_p = project_dir / "shots.json"
+    if shots_p.exists():
+        props["shots"] = strip_comments(load_json(shots_p))
+        props.setdefault("style", props["shots"].get("style"))
+    wall_p = project_dir / "wall.json"
+    if wall_p.exists():
+        props["wall"] = strip_comments(load_json(wall_p))
+    man_p = project_dir / "assets" / "manifest.json"
+    if man_p.exists():
+        media = {}
+        for a in load_json(man_p).get("assets") or []:
+            if a.get("file"):
+                media[a["file"]] = {
+                    "file": a["file"],
+                    "ai": bool(a.get("ai")),
+                    "source_tag": a.get("source_tag"),
+                    "attribution": a.get("attribution"),
+                }
+        props["media"] = media
+    geo_p = project_dir / "map" / "geo.json"
+    sat = project_dir / "map" / "satellite_4x3.jpg"
+    if geo_p.exists() and sat.exists():
+        geo = load_json(geo_p)
+        props["map"] = {"image": "map/satellite_4x3.jpg", "attribution": geo.get("attribution") or "地图数据"}
+    for cand in ("raw/presenter.mp4", "raw/presenter.mov", "raw/presenter.webm"):
+        if (project_dir / cand).exists():
+            props["presenter_clip"] = cand
+            break
+    if (project_dir / "audio" / "bgm.mp3").exists():
+        props["bgm"] = "audio/bgm.mp3"
+    sfx = {}
+    if (project_dir / "audio" / "sfx_whoosh.mp3").exists():
+        sfx["whoosh"] = "audio/sfx_whoosh.mp3"
+    if (project_dir / "audio" / "sfx_click.mp3").exists():
+        sfx["click"] = "audio/sfx_click.mp3"
+    if sfx:
+        props["sfx"] = sfx
     return props
 
 
@@ -80,6 +118,32 @@ def main(argv=None, still_default=False) -> int:
     if proc.returncode != 0:
         print(f"❌ Remotion 渲染失败（exit {proc.returncode}）", file=sys.stderr)
         return proc.returncode
+    if not (args.still or still_default) and out.exists():
+        target = -16.0
+        style = props.get("style") or (props.get("shots") or {}).get("style")
+        if style == "qiuzhi":
+            target = -17.0
+        tmp = out.with_suffix(".ln.mp4")
+        af = f"loudnorm=I={target}:TP=-1.5:LRA=11"
+        probe = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(out), "-af", af + ":print_format=json", "-f", "null", "-"],
+                               capture_output=True, text=True, encoding="utf-8", errors="replace")
+        try:
+            import json as _json
+            blob = probe.stderr[probe.stderr.rindex("{"): probe.stderr.rindex("}") + 1]
+            m = _json.loads(blob)
+            af = (f"loudnorm=I={target}:TP=-1.5:LRA=11:measured_I={m['input_i']}:measured_TP={m['input_tp']}:"
+                  f"measured_LRA={m['input_lra']}:measured_thresh={m['input_thresh']}:offset={m['target_offset']}:linear=true")
+        except Exception:
+            pass
+        ln = ["ffmpeg", "-y", "-i", str(out), "-af", af, "-ar", "48000",
+              "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", str(tmp)]
+        print(f"▶ 响度归一化 → {target} LUFS")
+        ln_proc = subprocess.run(ln, capture_output=True)
+        if ln_proc.returncode == 0 and tmp.exists():
+            tmp.replace(out)
+        else:
+            print("⚠️  loudnorm 失败，保留原片", file=sys.stderr)
+            tmp.unlink(missing_ok=True)
     print(f"✅ 完成：{out.relative_to(REPO_ROOT).as_posix()}")
     return 0
 

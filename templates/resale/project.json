@@ -110,5 +110,6 @@
     "property_right": "待填：如 70年产权/商品房",
     "ownership_note": "待填：满二/满五等，以权属证书为准",
     "_comment": "owner_consent：consent/ 下已放业主书面委托后改为 true"
-  }
+  },
+  "style": "qiuzhi"
 }
