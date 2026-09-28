@@ -1,3 +1,5 @@
+import type { EffectsDoc } from "./effects/types";
+
 // Mirrors pipeline/schema/*.json. Keep in sync with templates/ and check.py.
 export type Category = "rental" | "resale" | "new-home";
 export type Ratio = "4x3" | "3x4" | "9x16";
@@ -115,4 +117,5 @@ export type RenderExtras = {
   bgm?: string;
   sfx?: Record<string, string>;
   map?: { image: string; attribution: string };
+  effects?: EffectsDoc; // curated seeded effect picks (effects.json, pipeline/stages/effects.py)
 };

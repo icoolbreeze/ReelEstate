@@ -1,0 +1,505 @@
+{
+  "schema_version": 1,
+  "license": {
+    "shotcraft": {
+      "name": "video-shotcraft",
+      "url": "https://github.com/Vincentwei1021/video-shotcraft",
+      "spdx": "Apache-2.0",
+      "note": "Motion grammar re-implemented and re-skinned for ReelEstate style presets. See rules/effects/README.md."
+    },
+    "talkcraft": {
+      "name": "video-talkcraft",
+      "url": "https://github.com/Vincentwei1021/video-talkcraft",
+      "spdx": "PolyForm-Noncommercial-1.0.0",
+      "note": "Semantic pool taxonomy only (钩子/数据/对比/列举/号召…). No talkcraft demo code or assets are ported."
+    }
+  },
+  "excluded_motifs": [
+    "neon-marquee",
+    "bubble-swarm",
+    "paper-plane",
+    "heavy-glitch",
+    "confetti-burst",
+    "magician-flourish",
+    "sakuga-smear"
+  ],
+  "pools": [
+    "opener",
+    "chapter_title",
+    "data_number",
+    "comparison",
+    "price",
+    "floorplan",
+    "location_map",
+    "transition",
+    "list_checklist",
+    "cta_ending"
+  ],
+  "effects": [
+    {
+      "id": "blur-slide",
+      "name": "Blur Slide Title",
+      "source_card": "blur-slide",
+      "source": "shotcraft",
+      "pool": "opener",
+      "tags": [
+        "title",
+        "typography",
+        "soft"
+      ],
+      "energy": "low",
+      "duration_frames": [
+        60,
+        114
+      ],
+      "styles": [
+        "qiuzhi",
+        "mediastorm"
+      ],
+      "ported": true
+    },
+    {
+      "id": "lead-word-zoom",
+      "name": "Lead Word Zoom",
+      "source_card": "lead-word-zoom-assemble",
+      "source": "shotcraft",
+      "pool": "opener",
+      "tags": [
+        "title",
+        "hook",
+        "zoom"
+      ],
+      "energy": "high",
+      "duration_frames": [
+        50,
+        84
+      ],
+      "styles": [
+        "qiuzhi",
+        "mediastorm"
+      ],
+      "ported": true
+    },
+    {
+      "id": "brand-frame",
+      "name": "Brand Frame Snap",
+      "source_card": "brand-frame-snap",
+      "source": "shotcraft",
+      "pool": "opener",
+      "tags": [
+        "frame",
+        "brand",
+        "accent"
+      ],
+      "energy": "medium",
+      "duration_frames": [
+        40,
+        90
+      ],
+      "styles": [
+        "qiuzhi",
+        "mediastorm"
+      ],
+      "ported": true
+    },
+    {
+      "id": "marker-underline",
+      "name": "Marker Underline",
+      "source_card": "marker-underline-title",
+      "source": "shotcraft",
+      "pool": "chapter_title",
+      "tags": [
+        "title",
+        "underline",
+        "hand"
+      ],
+      "energy": "low",
+      "duration_frames": [
+        36,
+        60
+      ],
+      "styles": [
+        "qiuzhi",
+        "mediastorm"
+      ],
+      "ported": true
+    },
+    {
+      "id": "brace-expand",
+      "name": "Brace Expand",
+      "source_card": "brace-expand",
+      "source": "shotcraft",
+      "pool": "chapter_title",
+      "tags": [
+        "title",
+        "brace",
+        "typographic"
+      ],
+      "energy": "medium",
+      "duration_frames": [
+        40,
+        90
+      ],
+      "styles": [
+        "qiuzhi",
+        "mediastorm"
+      ],
+      "ported": true
+    },
+    {
+      "id": "odometer-roll",
+      "name": "Odometer Digit Roll",
+      "source_card": "odometer-digit-roll",
+      "source": "shotcraft",
+      "pool": "data_number",
+      "tags": [
+        "number",
+        "odometer",
+        "data"
+      ],
+      "energy": "high",
+      "duration_frames": [
+        60,
+        120
+      ],
+      "styles": [
+        "qiuzhi",
+        "mediastorm"
+      ],
+      "ported": true
+    },
+    {
+      "id": "count-up",
+      "name": "Count Up Settle",
+      "source_card": "odometer-digit-roll",
+      "source": "shotcraft",
+      "pool": "data_number",
+      "tags": [
+        "number",
+        "count",
+        "data"
+      ],
+      "energy": "medium",
+      "duration_frames": [
+        36,
+        72
+      ],
+      "styles": [
+        "qiuzhi",
+        "mediastorm"
+      ],
+      "ported": true,
+      "note": "Confetti-free count-up inspired by counter-confetti timing; no particle burst."
+    },
+    {
+      "id": "before-after-slider",
+      "name": "Before/After Slider",
+      "source_card": "before-after-slider-scrub",
+      "source": "shotcraft",
+      "pool": "comparison",
+      "tags": [
+        "compare",
+        "slider",
+        "reveal"
+      ],
+      "energy": "medium",
+      "duration_frames": [
+        60,
+        120
+      ],
+      "styles": [
+        "qiuzhi",
+        "mediastorm"
+      ],
+      "ported": true
+    },
+    {
+      "id": "dual-stat",
+      "name": "Dual Stat Compare",
+      "source_card": "value-stagger-gradient",
+      "source": "shotcraft",
+      "pool": "comparison",
+      "tags": [
+        "compare",
+        "stats",
+        "side-by-side"
+      ],
+      "energy": "medium",
+      "duration_frames": [
+        45,
+        90
+      ],
+      "styles": [
+        "qiuzhi",
+        "mediastorm"
+      ],
+      "ported": true
+    },
+    {
+      "id": "price-odometer",
+      "name": "Price Odometer",
+      "source_card": "odometer-digit-roll",
+      "source": "shotcraft",
+      "pool": "price",
+      "tags": [
+        "price",
+        "odometer",
+        "gold"
+      ],
+      "energy": "high",
+      "duration_frames": [
+        60,
+        120
+      ],
+      "styles": [
+        "qiuzhi",
+        "mediastorm"
+      ],
+      "ported": true
+    },
+    {
+      "id": "price-pop",
+      "name": "Price Pop",
+      "source_card": "outline-word-fill",
+      "source": "shotcraft",
+      "pool": "price",
+      "tags": [
+        "price",
+        "pop",
+        "accent"
+      ],
+      "energy": "medium",
+      "duration_frames": [
+        30,
+        60
+      ],
+      "styles": [
+        "qiuzhi",
+        "mediastorm"
+      ],
+      "ported": true
+    },
+    {
+      "id": "scan-bracket",
+      "name": "Scan Bracket Sweep",
+      "source_card": "scan-bracket-sweep",
+      "source": "shotcraft",
+      "pool": "floorplan",
+      "tags": [
+        "floorplan",
+        "scan",
+        "bracket"
+      ],
+      "energy": "low",
+      "duration_frames": [
+        60,
+        120
+      ],
+      "styles": [
+        "qiuzhi",
+        "mediastorm"
+      ],
+      "ported": true
+    },
+    {
+      "id": "scanline-focus",
+      "name": "Scanline Annotate Focus",
+      "source_card": "scanline-annotate-focus",
+      "source": "shotcraft",
+      "pool": "floorplan",
+      "tags": [
+        "floorplan",
+        "scanline",
+        "focus"
+      ],
+      "energy": "medium",
+      "duration_frames": [
+        60,
+        120
+      ],
+      "styles": [
+        "qiuzhi",
+        "mediastorm"
+      ],
+      "ported": true
+    },
+    {
+      "id": "pin-callout",
+      "name": "Map Pin Callout",
+      "source_card": "crash-zoom-punch",
+      "source": "shotcraft",
+      "pool": "location_map",
+      "tags": [
+        "map",
+        "pin",
+        "callout"
+      ],
+      "energy": "medium",
+      "duration_frames": [
+        36,
+        72
+      ],
+      "styles": [
+        "qiuzhi",
+        "mediastorm"
+      ],
+      "ported": true,
+      "note": "Real-estate re-skin: pin drop + callout label (motion grammar only)."
+    },
+    {
+      "id": "map-reticle",
+      "name": "Map Reticle Lock",
+      "source_card": "scan-bracket-sweep",
+      "source": "shotcraft",
+      "pool": "location_map",
+      "tags": [
+        "map",
+        "reticle",
+        "lock"
+      ],
+      "energy": "low",
+      "duration_frames": [
+        40,
+        90
+      ],
+      "styles": [
+        "qiuzhi",
+        "mediastorm"
+      ],
+      "ported": true
+    },
+    {
+      "id": "clock-wipe",
+      "name": "Clock Wipe",
+      "source_card": "wipe-transitions",
+      "source": "shotcraft",
+      "pool": "transition",
+      "tags": [
+        "transition",
+        "wipe",
+        "clock"
+      ],
+      "energy": "medium",
+      "duration_frames": [
+        24,
+        48
+      ],
+      "styles": [
+        "qiuzhi"
+      ],
+      "ported": true,
+      "note": "mediastorm is hard-cut only (rules/style/mediastorm.md §4), so transitions are qiuzhi-only."
+    },
+    {
+      "id": "color-block-wipe",
+      "name": "Color Block Step Wipe",
+      "source_card": "color-block-step-wipe",
+      "source": "shotcraft",
+      "pool": "transition",
+      "tags": [
+        "transition",
+        "wipe",
+        "accent"
+      ],
+      "energy": "high",
+      "duration_frames": [
+        18,
+        36
+      ],
+      "styles": [
+        "qiuzhi"
+      ],
+      "ported": true,
+      "note": "mediastorm is hard-cut only (rules/style/mediastorm.md §4), so transitions are qiuzhi-only."
+    },
+    {
+      "id": "list-reveal",
+      "name": "List Reveal",
+      "source_card": "list-reveal",
+      "source": "shotcraft",
+      "pool": "list_checklist",
+      "tags": [
+        "list",
+        "checklist",
+        "stagger"
+      ],
+      "energy": "low",
+      "duration_frames": [
+        60,
+        108
+      ],
+      "styles": [
+        "qiuzhi",
+        "mediastorm"
+      ],
+      "ported": true
+    },
+    {
+      "id": "checklist-stack",
+      "name": "Checklist Stack Press",
+      "source_card": "list-stack-press",
+      "source": "shotcraft",
+      "pool": "list_checklist",
+      "tags": [
+        "list",
+        "stack",
+        "checklist"
+      ],
+      "energy": "medium",
+      "duration_frames": [
+        45,
+        90
+      ],
+      "styles": [
+        "qiuzhi",
+        "mediastorm"
+      ],
+      "ported": true
+    },
+    {
+      "id": "cta-lockup",
+      "name": "CTA Wordmark Lockup",
+      "source_card": "logo-shrink-wordmark-lockup",
+      "source": "shotcraft",
+      "pool": "cta_ending",
+      "tags": [
+        "cta",
+        "outro",
+        "lockup"
+      ],
+      "energy": "medium",
+      "duration_frames": [
+        50,
+        100
+      ],
+      "styles": [
+        "qiuzhi",
+        "mediastorm"
+      ],
+      "ported": true
+    },
+    {
+      "id": "wordmark-settle",
+      "name": "Wordmark Settle",
+      "source_card": "grain-dissolve",
+      "source": "shotcraft",
+      "pool": "cta_ending",
+      "tags": [
+        "cta",
+        "outro",
+        "settle"
+      ],
+      "energy": "low",
+      "duration_frames": [
+        40,
+        72
+      ],
+      "styles": [
+        "qiuzhi",
+        "mediastorm"
+      ],
+      "ported": true,
+      "note": "Settle-only outro; grain/particle burst omitted as cheesy for real-estate."
+    }
+  ]
+}

@@ -41,6 +41,8 @@ remotion/src/styles/  # 风格预设 tokens：qiuzhi.ts / mediastorm.ts + fonts.
 remotion/src/shots/   # 共用镜头组件：ListingWall RoomCard FloorplanLocator LocationLabel SpecCard DataNumber MapReveal ShotVideo
 remotion/src/assets/fonts/  # 可商用字体 + 许可证（README.md）
 rules/style/<preset>.md     # 各风格预设的测量规则（写脚本/分镜前必读）
+rules/effects/              # 动效目录 catalog.json + README（用途池、约束、授权/署名）
+remotion/src/effects/       # 动效移植（shotcraft Apache-2.0 手法，按风格 tokens 重新蒙皮）
 assets/warehouse/     # 本地素材库（媒体文件 gitignore，只提交 README/SOURCES）
 templates/<category>/project.json   # 新项目模板
 templates/shots/<style>.example.json  # 分镜示例
@@ -87,6 +89,7 @@ npm run make -- "<一句话>" [--style qiuzhi|mediastorm] [--ratio 4x3] [--voice
 | 2 | listing:wall | `wall.json`、`raw/wall/*` | 6–12 张卡 + picked；CRM 编号不进 wall.json（映射在 `raw/wall_map.json`） |
 | 3 | map:fetch | `map/geo.json`、`map/satellite_4x3.jpg`、`map/static.png`、`map/pois.json` | map-tools skill（高德，GCJ-02）；失败时生成“示意底图” |
 | 4 | assets:import | `assets/manifest.json` | 每个素材的来源/许可/水印/AI 标记 |
+| 4b | effects | `effects.json` | 从 `rules/effects/catalog.json` 按用途池为每个镜头抽动效：种子=项目 id（重渲染不变），`--reseed` 重抽；同片不重复、相邻不同、每 30s ≤2 个高能；避开最近 5 条视频（`projects/.effects-history.json`，gitignore）。render 读 effects.json |
 | 5 | script | `project.json` 的 `narration.segments` + `shots.json` | **Agent 按 `rules/style/<preset>.md` 自己写**；自动生成的是确定性兜底稿（模板感重，必须改写） |
 | 6 | tts | `audio/seg_*.wav`、`audio/segments.json` | edge（草稿）/ qwen（本地）/ own（自录，需 `raw/voice/seg_*.wav`） |
 | 7 | check | — | 硬门槛：合规 + 隐私 PII + 素材清单/水印 + 地图署名 + 风格 |
@@ -141,6 +144,7 @@ npm run make -- "<一句话>" [--style qiuzhi|mediastorm] [--ratio 4x3] [--voice
 | `npm run preview -- projects/rental/<id>` | Remotion Studio 预览 |
 | `npm run make -- "<一句话>" [--style mediastorm] [--ratio 4x3] [--mock]` | 一句话成片（§3A） |
 | `npm run listing:fetch -- <dir>` / `listing:wall` / `map:fetch` / `assets:import` / `script` / `voice` | 单独重跑某阶段（加 `--force` 覆盖） |
+| `npm run effects -- <dir> [--reseed [N]] [--force]` | 重抽/重算本片动效（写 effects.json；改完需重渲染） |
 | `npm run setup` | 安装 remotion/ 依赖 |
 | `npm run typecheck` | `tsc --noEmit` |
 | `scripts\build-tts.cmd` | 编译 qwen-tts.exe（只有用户要求时才运行） |

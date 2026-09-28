@@ -1,5 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Audio, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
+import { EFFECTS, resolveEffects, type EffectId, type ResolvedEffects } from "../effects";
 import type { InfoField } from "../shared/InfoBar";
 import { buildTimeline } from "../shared/timeline";
 import { ensureFonts } from "../styles/fonts";
@@ -44,9 +45,27 @@ export const buildShotItems = (project: Project, fps: number): ShotItem[] => {
   return items;
 };
 
-const ShotScene: React.FC<{ it: ShotItem; project: Project; st: StyleTokens }> = ({ it, project, st }) => {
+/** Curated effect layer for one shot (see rules/effects/, effects.json). */
+const EffectLayer: React.FC<{ id?: EffectId; it: ShotItem; project: Project; st: StyleTokens }> = ({ id, it, project, st }) => {
+  const e = id ? EFFECTS[id] : undefined;
+  if (!e || e.kind !== "shot") return null;
+  const C = e.component;
+  return <C st={st} project={project} shot={it.shot} duration={it.duration} />;
+};
+
+const TransitionLayer: React.FC<{ id?: EffectId; it: ShotItem; st: StyleTokens }> = ({ id, it, st }) => {
+  const e = id ? EFFECTS[id] : undefined;
+  if (!e || e.kind !== "transition") return null;
+  const C = e.component;
+  return <C st={st} duration={it.duration} />;
+};
+
+const ShotScene: React.FC<{ it: ShotItem; project: Project; st: StyleTokens; fx: ResolvedEffects }> = ({ it, project, st, fx }) => {
   const f = useCurrentFrame();
   const { shot } = it;
+  const effectId = fx.shot.get(shot.id);
+  const entry = effectId ? EFFECTS[effectId] : undefined;
+  const replaces = entry && entry.kind === "shot" ? entry.replaces : "none";
   const clip = project.presenter_clip;
   const media = shot.media ? project.media?.[shot.media] : undefined;
   const fullPresenter = shot.presenter === "fullscreen" || shot.type === "presenter" || shot.type === "outro";
@@ -80,11 +99,12 @@ const ShotScene: React.FC<{ it: ShotItem; project: Project; st: StyleTokens }> =
       {shot.type === "spec" && !shot.media && fullPresenter ? <AbsoluteFill style={{ background: "linear-gradient(90deg, rgba(0,0,0,.55), rgba(0,0,0,0) 70%)" }} /> : null}
       {shot.type === "spec" && shot.media ? <AbsoluteFill style={{ background: "linear-gradient(90deg, rgba(0,0,0,.35), rgba(0,0,0,0) 75%)" }} /> : null}
       {shot.room ? <RoomCard room={shot.room} st={st} /> : null}
-      {shot.location ? <LocationLabel loc={shot.location} st={st} /> : null}
-      {shot.spec ? <SpecCard spec={shot.spec} st={st} /> : null}
-      {shot.number ? <DataNumber num={shot.number} st={st} /> : null}
-      {shot.type === "outro" ? <OutroCTA cta={shot.cta ?? "点击下方组件 预约看房"} agency={project.agency.full_name} st={st} frame={f} /> : null}
+      {shot.location && replaces !== "location" ? <LocationLabel loc={shot.location} st={st} /> : null}
+      {shot.spec && replaces !== "spec" ? <SpecCard spec={shot.spec} st={st} /> : null}
+      {shot.number && replaces !== "number" ? <DataNumber num={shot.number} st={st} /> : null}
+      {shot.type === "outro" && replaces !== "outro" ? <OutroCTA cta={shot.cta ?? "点击下方组件 预约看房"} agency={project.agency.full_name} st={st} frame={f} /> : null}
       {showLocator ? <FloorplanLocator rooms={rooms} current={shot.locator} st={st} schematic={project.shots?.floorplan?.schematic} /> : null}
+      <EffectLayer id={effectId} it={it} project={project} st={st} />
       {pip && clip ? <StylePresenter clip={clip} mode={pip} st={st} startFrom={it.from} /> : null}
       {tag ? <SourceTag text={tag} st={st} /> : null}
       <ShotBadge labels={labels} st={st} />
@@ -93,6 +113,7 @@ const ShotScene: React.FC<{ it: ShotItem; project: Project; st: StyleTokens }> =
           <StyleCaptions text={it.segText} st={st} speechFrames={it.speechFrames} left={capL} right={capRight} bottom={capBottom} />
         </Sequence>
       ) : null}
+      <TransitionLayer id={fx.transitionIn.get(shot.id)} it={it} st={st} />
     </AbsoluteFill>
   );
 };
@@ -102,6 +123,7 @@ export const ShotVideo: React.FC<{ project: Project; fields: InfoField[] }> = ({
   const { fps, width, height, durationInFrames } = useVideoConfig();
   const st = getStyle(project.style ?? project.shots?.style);
   const items = buildShotItems(project, fps);
+  const fx = resolveEffects(items.map((i) => i.shot), project.effects);
   const tl = buildTimeline(project, fps);
   const scale = Math.min(width / W, height / H);
   const badges = [project.is_example ? "示例数据" : "", project.ai_voice ? "含AI合成配音" : "", project.ad_disclosure ? "广告" : ""].filter(Boolean);
@@ -111,7 +133,7 @@ export const ShotVideo: React.FC<{ project: Project; fields: InfoField[] }> = ({
       <div style={{ position: "absolute", width: W, height: H, left: (width - W * scale) / 2, top: (height - H * scale) / 2, transform: `scale(${scale})`, transformOrigin: "top left", overflow: "hidden" }}>
         {items.map((it) => (
           <Sequence key={it.shot.id} from={it.from} durationInFrames={it.duration} name={`${it.shot.id} ${it.shot.type}`}>
-            <ShotScene it={it} project={project} st={st} />
+            <ShotScene it={it} project={project} st={st} fx={fx} />
           </Sequence>
         ))}
         <ComplianceStrip fields={fields} badges={badges} st={st} />

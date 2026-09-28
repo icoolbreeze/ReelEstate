@@ -18,6 +18,11 @@ script 阶段的兜底稿只是骨架：**Agent 必须按 `rules/style/<preset>.
 new → 素材放入 raw/ → ASR 转写（占位）→ 写口播分段 → TTS（可选）→ check → render → 发布前自检
 ```
 
+### 动效随机（curated seeded randomness）
+- `effects` 阶段在 script 之前运行，按镜头用途池从 `rules/effects/catalog.json` 抽动效，写 `effects.json`；种子=项目 id，重渲染结果不变。
+- 想换一组：`npm run effects -- projects/rental/<id> --reseed` 然后重新 render。约束与池说明见 `rules/effects/README.md`。
+- 改写 shots.json 时不必改 effects.json：渲染按镜头 id 匹配，匹配不上就按池顺序分配。
+
 ## 1. 新建项目
 
 ```powershell

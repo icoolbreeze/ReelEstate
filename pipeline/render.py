@@ -33,6 +33,9 @@ def build_props(project_dir: Path) -> dict:
     if shots_p.exists():
         props["shots"] = strip_comments(load_json(shots_p))
         props.setdefault("style", props["shots"].get("style"))
+    fx_p = project_dir / "effects.json"
+    if fx_p.exists():
+        props["effects"] = strip_comments(load_json(fx_p))
     wall_p = project_dir / "wall.json"
     if wall_p.exists():
         props["wall"] = strip_comments(load_json(wall_p))

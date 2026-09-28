@@ -65,3 +65,6 @@ desktop.ini
 !/assets/warehouse/
 !/assets/warehouse/README.md
 !/assets/warehouse/SOURCES.json
+
+# ---- 动效抽取历史（本机，避开最近 5 条视频用过的效果）----
+/projects/.effects-history.json

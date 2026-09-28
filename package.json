@@ -18,6 +18,7 @@
     "listing:wall": "python pipeline/make.py --only listing:wall --project",
     "map:fetch": "python pipeline/make.py --only map:fetch --project",
     "assets:import": "python pipeline/make.py --only assets:import --project",
+    "effects": "python pipeline/make.py --only effects --project",
     "script": "python pipeline/make.py --only script --project",
     "voice": "python pipeline/make.py --only tts --project"
   },

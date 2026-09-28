@@ -12,6 +12,7 @@ Stages (idempotent; skip if outputs exist unless --force):
   2 listing:wall     → wall.json + raw/wall/*
   3 map:fetch        → map/geo.json + satellite_4x3.jpg + static.png + pois.json
   4 assets:import    → assets/manifest.json (+ seed warehouse stock)
+  4b effects         → effects.json (curated seeded effect picks; --reseed to redraw)
   5 script           → project.json + shots.json  (agent should rewrite; fallback provided)
   6 tts              → audio/seg_*.wav + audio/segments.json
   7 check            → hard gate (extended)
@@ -32,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from reel_common import PROJECTS_DIR, REPO_ROOT, load_json, resolve_project_dir, save_json, setup_console  # noqa: E402
 from stages import assets as stage_assets  # noqa: E402
 from stages import brief as stage_brief  # noqa: E402
+from stages import effects as stage_effects  # noqa: E402
 from stages import listing as stage_listing  # noqa: E402
 from stages import map_fetch as stage_map  # noqa: E402
 from stages import script_stage as stage_script  # noqa: E402
@@ -44,6 +46,7 @@ STAGES = [
     ("listing:wall", "2 listing:wall"),
     ("map:fetch", "3 map:fetch"),
     ("assets:import", "4 assets:import"),
+    ("effects", "4b effects"),
     ("script", "5 script"),
     ("tts", "6 tts"),
     ("check", "7 check"),
@@ -147,6 +150,8 @@ def main(argv=None) -> int:
     ap.add_argument("--until", choices=[s for s, _ in STAGES], help="跑到该阶段为止（含）")
     ap.add_argument("--only", choices=[s for s, _ in STAGES], help="只跑这一阶段")
     ap.add_argument("--answer", action="append", default=[], help="key=value，写入 brief；可重复")
+    ap.add_argument("--reseed", nargs="?", type=int, const=-1, default=None,
+                    help="重抽动效（effects 阶段）：不带值=在当前 reseed 上 +1；带值=指定 reseed 盐")
     ap.add_argument("--voice", choices=["edge", "qwen", "own"], help="配音方式（写入 brief.voice.mode）")
     args = ap.parse_args(argv)
 
@@ -210,6 +215,7 @@ def main(argv=None) -> int:
         "listing:wall": lambda: stage_wall.run(project_dir, force=args.force),
         "map:fetch": lambda: stage_map.run(project_dir, force=args.force),
         "assets:import": lambda: stage_assets.run(project_dir, force=args.force),
+        "effects": lambda: stage_effects.run(project_dir, force=args.force, reseed=args.reseed),
         "script": lambda: stage_script.run(project_dir, force=args.force),
         "tts": lambda: _run_tts(project_dir, brief, force=args.force),
         "check": lambda: _run_check(project_dir),
