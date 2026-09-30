@@ -7,6 +7,7 @@
     "new": "python pipeline/new_project.py",
     "tts": "python pipeline/tts/qwen_tts.py",
     "check": "python pipeline/check/check.py",
+    "check:taste": "python pipeline/check/harmony_check.py --project",
     "render": "python pipeline/render.py",
     "still": "python pipeline/render.py --still",
     "preview": "python pipeline/preview.py",

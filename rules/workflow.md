@@ -91,3 +91,7 @@ render 会先运行 check，不通过则拒绝渲染。输出 `output/<id>_<rati
 9b. 列表墙里其他房源已虚化或都有委托？画面无 CRM 编号/平台水印/经纪人姓名？
 10. 主要出镜人是视频号认证经纪人本人？画面无黑边、清晰，标题与内容一致？
 11. 挂合规留资组件（视频号留资组件/企微获客助手；抖音线索小程序），CTA 不写“私信领资料”？
+
+## 审美与 harmony 检查（强制）
+
+写 `shots.json` / 渲染之前先读 `rules/taste.md`；渲染后为至少 4 个不同镜头 `npm run still -- projects/<cat>/<id> --frame <N>`，再 `npm run check -- projects/<cat>/<id> --require-taste`（或 `npm run check:taste -- projects/<cat>/<id>`）。硬失败阻断交付；每张静帧必须人工看过。详见 AGENTS.md §3D。

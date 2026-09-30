@@ -109,6 +109,14 @@ npm run make -- "<一句话>" [--style qiuzhi|mediastorm] [--ratio 4x3] [--voice
 
 不要替用户回答这些问题；`--mock` 只用于演示/测试，产物带“示例数据”角标。
 
+## 3D. 审美规则与 harmony 检查（强制，所有 Agent）
+
+1. **写 `shots.json` / 改镜头组件 / 渲染之前，必须先读 `rules/taste.md`**（taste-skill 的视频量化版：Design Read、三个 dial、反 AI 默认禁令、4:3 安全区与字幕/PiP 碰撞区、单一世界分层、字号表、动效上限）。开工前写出 Design Read 一行。
+2. **渲染后**：用 `npm run still -- projects/<cat>/<id> --frame <N>` 为**至少 4 个不同镜头**出静帧，然后 `npm run check -- projects/<cat>/<id> --require-taste`（自动跑 `pipeline/check/harmony_check.py`；只跑审美检查用 `npm run check:taste -- projects/<cat>/<id>`）。
+3. **硬失败（FAIL）阻断交付**：修（优先改代码）→ 重出静帧 → 重跑。软警告（WARN）在交付说明里逐条写明处理或理由。没有静帧时 check 会打印提示，**不等于通过**。
+4. **必须人工看过每一张静帧**（脚本只抓回归，不判断品味；可见的接缝、水印、文字碰撞、第二层地图一律算不通过）。
+5. 不得用 `--skip-taste` 绕过；只有用户明确同意时才可用，并在交付说明里写明。
+
 ## 3B. 数据源与隐私规则
 
 **房源（crm_connector，BeikeMicroservice/services/crm_connector）**
@@ -141,6 +149,7 @@ npm run make -- "<一句话>" [--style qiuzhi|mediastorm] [--ratio 4x3] [--voice
 | `npm run check -- projects/rental/<id>` | 合规检查，失败返回非 0 |
 | `npm run render -- projects/rental/<id> [--ratio 4x3\|3x4\|9x16]` | 先 check，再渲染到 `output/<id>_<ratio>.mp4` |
 | `npm run still -- projects/rental/<id> [--ratio 4x3] [--frame 220]` | 渲染单帧 PNG（快速验证） |
+| `npm run check:taste -- projects/rental/<id>` | 只跑静帧 harmony 审美检查（§3D）；`check --require-taste` = 合规 + 审美 |
 | `npm run preview -- projects/rental/<id>` | Remotion Studio 预览 |
 | `npm run make -- "<一句话>" [--style mediastorm] [--ratio 4x3] [--mock]` | 一句话成片（§3A） |
 | `npm run listing:fetch -- <dir>` / `listing:wall` / `map:fetch` / `assets:import` / `script` / `voice` | 单独重跑某阶段（加 `--force` 覆盖） |
@@ -170,6 +179,7 @@ npm run make -- "<一句话>" [--style qiuzhi|mediastorm] [--ratio 4x3] [--voice
 - `rules/compliance/rental.md` / `resale.md` / `new-home.md` — 分类专项
 - `rules/style.md` — 视觉风格、节奏、镜头效果
 - `rules/style/mediastorm.md`、`rules/style/qiuzhi.md` — 风格预设（测量值、组件用法）
+- `rules/taste.md` — **审美规则 + 渲染后 harmony 检查（写分镜/渲染前必读，§3D）**（许可证：`rules/LICENSE-taste-skill.txt`）
 - `docs/one-sentence-workflow.md`（给用户的版本：`docs/one-sentence-workflow.docx`）
 - `rules/workflow.md` — 流程与发布前自检
 - `rules/reference/` — 原始调研（含全部来源链接）

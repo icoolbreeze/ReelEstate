@@ -495,11 +495,50 @@ def print_report(project_dir: Path, r: Report) -> None:
         print(f"结果：✅ 通过（{n_warn} 项提醒）。发布前请完成 📋 手动事项与 rules/workflow.md 自检清单。")
 
 
+def run_taste(project_dir: Path, require: bool = False, skip: bool = False) -> int:
+    """Post-render harmony check (rules/taste.md section 8). Returns 0 ok/warn, 1 hard fail.
+
+    Not part of run(): render.py / make.py call run() before any still exists.
+    """
+    import os
+    import subprocess
+    print("\n==== 审美 harmony 检查（rules/taste.md §8）====")
+    if skip:
+        print("  ⚠️  已用 --skip-taste 跳过审美 harmony 检查。交付说明里必须写明原因；此项不计入通过。")
+        return 0
+    out = project_dir / "output"
+    stills = sorted(set(out.glob("*_f*.png")) | set((out / "stills").glob("*.png"))) if out.is_dir() else []
+    rel = project_dir.relative_to(REPO_ROOT).as_posix() if project_dir.is_relative_to(REPO_ROOT) else str(project_dir)
+    if not stills:
+        print("  ⚠️  没有静帧，审美检查未运行（不是通过）。先为至少 4 个不同镜头出静帧：")
+        print(f"      npm run still -- {rel} --frame <N>      （重复 4 次以上，换不同的 N）")
+        print(f"      然后重跑：npm run check -- {rel}")
+        if require:
+            print("  ❌ --require-taste：交付前必须有静帧并通过 harmony 检查。")
+            return 1
+        return 0
+    mp4s = list(out.glob("*.mp4"))
+    if mp4s and max(s.stat().st_mtime for s in stills) < max(m.stat().st_mtime for m in mp4s):
+        print("  ⚠️  静帧早于最新成片：这些静帧可能是旧渲染，请重新 npm run still 后再检查。")
+    script = Path(__file__).resolve().parent / "harmony_check.py"
+    sys.stdout.flush()
+    env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
+    proc = subprocess.run([sys.executable, str(script), *map(str, stills)], env=env)
+    if proc.returncode == 0:
+        print("  ✅ harmony 无硬失败。仍需人工逐张看静帧（rules/taste.md §8 第 5 条）。")
+        return 0
+    print("  ❌ harmony 硬失败：阻断交付。按 rules/taste.md 修复（优先改代码）→ 重渲染静帧 → 重跑。"
+          if proc.returncode == 1 else f"  ❌ harmony 检查异常退出（exit {proc.returncode}），见上方输出。")
+    return 1
+
+
 def main(argv=None) -> int:
     setup_console()
     ap = argparse.ArgumentParser(description="ReelEstate 合规检查")
     ap.add_argument("project", help="项目目录，如 projects/rental/2026-10-03-lvcheng-2b1l")
     ap.add_argument("--json", action="store_true", help="输出 JSON 结果")
+    ap.add_argument("--require-taste", action="store_true", help="交付前：没有静帧也算失败（rules/taste.md §8）")
+    ap.add_argument("--skip-taste", action="store_true", help="跳过审美 harmony 检查（会在输出中明确标注，须在交付说明写明原因）")
     args = ap.parse_args(argv)
     try:
         project_dir = resolve_project_dir(args.project)
@@ -512,6 +551,8 @@ def main(argv=None) -> int:
                          ensure_ascii=False, indent=2))
     else:
         print_report(project_dir, r)
+        taste_rc = run_taste(project_dir, args.require_taste, args.skip_taste)
+        return 1 if (r.failed or taste_rc) else 0
     return 1 if r.failed else 0
 
 
