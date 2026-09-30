@@ -1,11 +1,15 @@
 """Stage 3 · map:fetch — geocode community → map/geo.json + satellite_4x3.jpg + static.png + pois.json.
 
-Calls the map-tools skill script. Never prints API keys. Falls back to a schematic satellite
-placeholder when keys / network fail; live_status is recorded so the sample report is accurate.
+Calls the map-tools script configured in config/map-tools.json
+(default ~/.agents/skills/map-tools/scripts/map.py; override with MAP_TOOLS_SCRIPT).
+Never prints API keys. Falls back to a schematic satellite placeholder when keys / network fail;
+live_status is recorded so the sample report is accurate.
 
 The map is a mandatory part of every video. Extra outputs: map/route.json (Amap route distance/duration,
-only Amap-returned numbers) and the flova repaint hand-off: flova is an MCP that only the agent can call, so
-this stage writes map/flova_request.json and exits 3 (NeedInput) until the agent saved map/base_ai.png.
+only Amap-returned numbers) and the flova IMAGE repaint hand-off: flova is an MCP that only the agent can call, so
+this stage writes map/flova_request.json (generate_image, gpt-image-2.5 family, profile kid4, original:true, reference
+map/static.png) and exits 3 (NeedInput) until the agent saved map/base_ai.png; the code then overlays labels/distances.
+No video generation for the map (generate_video is off by default everywhere; see brief flova.video_allowed).
 --mock / flova.allowed=false / no live Amap data: no repaint, labelled placeholder or real Amap imagery is kept.
 Credits are handled by the flova MCP and are never a limit; failures are surfaced to the user, not worked around.
 """
@@ -20,18 +24,40 @@ from pathlib import Path
 
 from .common import NeedInput, load_brief, load_json, now_iso, save_json
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MAP_PY = Path.home() / ".agents" / "skills" / "map-tools" / "scripts" / "map.py"
+MAP_CONFIG = REPO_ROOT / "config" / "map-tools.json"
 ATTRIBUTION = "地图数据 © 高德地图（示意，非测绘成果）"
+
+# Used when config/map-tools.json is missing or broken: finding the script must never crash the stage.
+_FALLBACK_MAP_PY = [
+    REPO_ROOT / "vendor" / "map-tools" / "scripts" / "map.py",
+    DEFAULT_MAP_PY,
+]
+
+
+def _resolve_map_path(raw: str) -> Path:
+    p = Path(raw).expanduser()  # "~" -> user home
+    if not p.is_absolute():
+        p = REPO_ROOT / p  # relative paths are relative to the repo root
+    return p
 
 
 def _find_map_py() -> Path | None:
-    candidates = [
-        Path(__file__).resolve().parents[2] / "vendor" / "map-tools" / "scripts" / "map.py",
-        DEFAULT_MAP_PY,
-    ]
-    import os
+    candidates: list[Path] = []
     if os.environ.get("MAP_TOOLS_SCRIPT"):
-        candidates.insert(0, Path(os.environ["MAP_TOOLS_SCRIPT"]))
+        candidates.append(_resolve_map_path(os.environ["MAP_TOOLS_SCRIPT"]))
+    try:
+        cfg = json.loads(MAP_CONFIG.read_text(encoding="utf-8"))
+        script = cfg.get("script")
+        if isinstance(script, str) and script.strip():
+            candidates.append(_resolve_map_path(script.strip()))
+        for c in cfg.get("script_candidates") or []:
+            if isinstance(c, str) and c.strip():
+                candidates.append(_resolve_map_path(c.strip()))
+    except (OSError, ValueError):
+        pass  # missing or corrupt config: fall back to the hardcoded candidates
+    candidates.extend(_FALLBACK_MAP_PY)
     for c in candidates:
         if c.is_file():
             return c
@@ -91,7 +117,11 @@ def _placeholder_satellite(out: Path, label: str) -> None:
 
 ATTR_AI = "示意图 / AI 生成底图 / © 高德地图"
 ATTR_SCHEMATIC = "示意图 / 示意底图（非真实地图）/ © 高德地图"
-FLOVA_PARAMS = {"profile": "kid4", "original": True}  # generation + original non-watermarked image only
+# Image generation only (never generate_video): original non-watermarked image. The map repaint is the one place
+# that passes profile kid4 (user decision). Model: gpt-image-2.5 family, see config/flova-models.json.
+FLOVA_TOOL = "generate_image"
+FLOVA_MODEL = "gpt-image-2.5-sunburst"  # polished image edit from a reference image (config/flova-models.json)
+FLOVA_PARAMS = {"profile": "kid4", "original": True}
 FLOVA_PROMPT = (
     "Restyle this Amap road map into a clean, bright, low-saturation illustrated map for a real-estate short "
     "video. Keep the road network, water bodies, blocks and the centre marker exactly where they are. Do not add, "
@@ -192,8 +222,9 @@ def _repaint_step(project_dir: Path, brief: dict, listing: dict, geo: dict) -> d
 
     rel_dir = project_dir.name
     request = {
-        "purpose": "Repaint the Amap static map into a stylised base map (agent-performed; flova is an MCP, not callable from repo Python)",
-        "tool": "flova image generation (MCP server flova-image, registered in ZCode on the user's PC)",
+        "purpose": "Repaint the Amap static map into a stylised base map (agent-performed via the flova-image MCP; repo Python cannot call MCP). Image only, no video.",
+        "tool": FLOVA_TOOL,  # flova-image MCP (declared in the repo .mcp.json / .grok/config.toml): image generation only, never generate_video
+        "model": FLOVA_MODEL,
         "prompt": FLOVA_PROMPT,
         "source_image": "map/static.png",
         "output_image": "map/base_ai.png",
@@ -207,12 +238,13 @@ def _repaint_step(project_dir: Path, brief: dict, listing: dict, geo: dict) -> d
         save_json(req_p, request)
         geo["base"] = "amap"
         geo["repaint"] = {"status": "pending", "request": "map/flova_request.json"}
+        geo.pop("map_motion", None)  # video map motion is retired (video generation is off by default)
         save_json(geo_p, geo)
         proj = project_dir.as_posix()
         text = (
-            f"map:fetch 需要 Agent 用 flova 重绘地图底图（flova 只在用户 PC 的 ZCode MCP 里，仓库 Python 调不了）：\n"
+            f"map:fetch 需要 Agent 用 flova 图像生成重绘地图底图（仓库 Python 调不了 MCP；只生图，不生成视频）：\n"
             f"    1. 读 {proj}/map/flova_request.json（prompt / source_image / output_image / params）\n"
-            f"    2. 调 flova 图像生成 MCP：prompt=request.prompt，参考图={proj}/map/static.png，参数 profile=\"kid4\"、original=true\n"
+            f"    2. 调 flova-image 的 generate_image（model={FLOVA_MODEL}，gpt-image-2.5 系列）：prompt=request.prompt，参考图={proj}/map/static.png，参数 profile=\"kid4\"、original=true；不要调 generate_video\n"
             f"    3. 把返回的无水印原图保存为 {proj}/map/base_ai.png\n"
             f"    4. 重跑同一命令（或 npm run map:fetch -- {proj}）\n"
             f"    积分由 flova MCP 自行处理，不是限制；若生成失败（含积分原因），把错误原文告诉用户，不要绕过，不要用邀请/多账号等方式。"
@@ -226,7 +258,8 @@ def _repaint_step(project_dir: Path, brief: dict, listing: dict, geo: dict) -> d
             shutil.copy2(sat_p, amap_copy)  # keep the real Amap satellite next to the AI base
         _to_4x3_jpg(base_ai, sat_p)
         geo.update({"base": "ai_repaint", "base_ai": "map/base_ai.png", "base_ai_sha1": sha, "attribution": ATTR_AI,
-                    "flova_prompt": FLOVA_PROMPT, "flova_params": dict(FLOVA_PARAMS)})
+                    "flova_prompt": FLOVA_PROMPT, "flova_params": dict(FLOVA_PARAMS), "flova_model": FLOVA_MODEL})
+        geo.pop("map_motion", None)
     request["status"] = "done"
     save_json(req_p, request)
     geo["repaint"] = {"status": "done"}

@@ -31,7 +31,8 @@
     "rate": "+15%"
   },
   "flova": {
-    "allowed": true
+    "allowed": true,
+    "video_allowed": false
   },
   "photos": {
     "exclude": []

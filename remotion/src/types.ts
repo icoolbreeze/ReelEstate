@@ -61,7 +61,7 @@ export type Project = RenderExtras & {
 
 // ---- v5: one-sentence workflow (shots.json-driven rendering) ----
 // Mirrors pipeline/schema/shots.json + fields injected by pipeline/render.py.
-export type StyleName = "qiuzhi" | "mediastorm";
+export type StyleName = "mediastorm";
 export type ShotPresenter = PresenterMode | "none";
 export type ShotType = "presenter" | "wall" | "map" | "room" | "broll" | "spec" | "number" | "outro";
 

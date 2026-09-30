@@ -1,9 +1,14 @@
 """Stage 4 · assets:import — seed project stock media + write assets/manifest.json.
 
-flova is NOT called from this stage (the agent calls flova via its own MCP client when the user
-allowed it in brief.flova). This stage only records whatever is already under raw/ / assets/ and
-copies the warehouse stock placeholders used by the sample. check fails on missing or watermarked
-entries; AI entries must carry ai=true so the renderer paints the AI生成 badge.
+flova is NOT called from this stage (the agent calls the flova-image MCP declared in the repo
+.mcp.json / .grok/config.toml when the user allowed it in brief.flova). Video: generate_video with
+model wan-3.0-prime and a reference image, ONLY when brief.flova.video_allowed is true (default false: no video
+generation anywhere, including the map). Images: generate_image, model gpt-image-2.5-sunburst
+(final / polished / brand) or gpt-image-2.5-flare (daily / batch / social / quick iteration).
+This stage only records whatever is already under raw/ / assets/ and copies the warehouse stock
+placeholders used by the sample.
+check fails on missing or watermarked entries; AI entries must carry ai=true so the renderer
+paints the AI生成 badge.
 """
 from __future__ import annotations
 
@@ -33,6 +38,7 @@ def _entry(rel: str, **meta) -> dict:
         "watermarked": bool(meta.get("watermarked", False)),
         "license": meta.get("license", "unknown"),
         "ai": bool(meta.get("ai", False)),
+        "usage": meta.get("usage"),
         "attribution": meta.get("attribution"),
         "source_tag": meta.get("source_tag"),
         "sha1": meta.get("sha1"),
@@ -122,7 +128,7 @@ def scan_existing(project_dir: Path, existing: list[dict]) -> list[dict]:
             out.append(_entry(rel, source="user", license="user-owned", attribution="用户提供",
                               source_tag="素材来源：实拍", sha1=_sha1(p)))
             known.add(rel)
-    # Map imagery
+    # Map imagery — when map:fetch repainted the Amap map (map/base_ai.png -> satellite_4x3.jpg) the still frame is an AI asset.
     geo = load_json(project_dir / "map" / "geo.json") if (project_dir / "map" / "geo.json").exists() else {}
     live = geo.get("live_status") == "ok"
     ai_base = geo.get("base") == "ai_repaint"
@@ -137,10 +143,13 @@ def scan_existing(project_dir: Path, existing: list[dict]) -> list[dict]:
                            attribution=geo.get("attribution", "地图数据"),
                            source_tag=tag_ok if live else tag_mock, sha1=_sha1(p),
                            watermarked=False)
-            if ai_base and name == "map/satellite_4x3.jpg":  # flova repaint of the Amap map (labelled AI base)
-                entry.update(source="flova", ai=True, model="flova (profile kid4, original)", prompt=geo.get("flova_prompt"),
-                             usage="decorative", source_tag="AI生成底图", license="flova-generated original (non-watermarked)")
+            if ai_base and name == "map/satellite_4x3.jpg":  # flova image repaint of the Amap map (labelled AI base)
+                # model comes from geo.json (written by map:fetch); never invented here so check can fail a missing one.
+                entry.update(source="flova", ai=True, model=geo.get("flova_model"), prompt=geo.get("flova_prompt"),
+                             usage="decorative", source_tag="AI生成底图",
+                             license="flova-generated original (non-watermarked)")
             out.append(entry)
+            known.add(name)
     return out
 
 
@@ -167,16 +176,27 @@ def run(project_dir: Path, force: bool = False) -> dict:
                     e["ai"] = True
                     e["source"] = e.get("source") or "flova"
                     e["source_tag"] = e.get("source_tag") or "AI生成"
+                    # Never invent a model here: a video keeps wan-3.0-prime and an image must name its
+                    # own gpt-image-2.5 model; a missing image model stays missing so check fails (never "wan").
                     if e.get("watermarked") is None:
                         e["watermarked"] = True  # fail closed when unknown
                     break
 
     if (brief.get("flova") or {}).get("allowed"):
-        note = "flova allowed (credits are not a limit) — agent calls the flova MCP itself: decorative/transition clips and the map base repaint (map:fetch), then re-run assets:import."
+        note = ("flova image generation allowed (credits are not a limit) — agent calls the flova-image MCP itself: "
+                "images via generate_image: gpt-image-2.5-sunburst (final/polished/brand/map repaint) or gpt-image-2.5-flare "
+                "(daily/batch/social/quick iteration); the map repaint (map:fetch -> map/base_ai.png) is an image job. ")
+        if (brief.get("flova") or {}).get("video_allowed") is True:
+            note += "Video generation explicitly allowed by the user (flova.video_allowed=true): generate_video with model wan-3.0-prime and a reference image. "
+        else:
+            note += "Video generation is OFF (flova.video_allowed is not true): do NOT call generate_video. "
+        note += "Then re-run assets:import."
     else:
         note = "flova not allowed for this project (decorative AI clips disabled)."
 
     save_json(man, {"assets": entries, "built_at": now_iso(), "note": note,
-                    "policy": "decorative/transition + the labelled map base repaint only; never for floorplans/interiors/views/neighborhood; "
-                              "no watermark removal; request only the original non-watermarked image (profile kid4, original:true); every AI asset carries AI生成 label"})
+                    "policy": "video generation is OFF by default (brief.flova.video_allowed); when the user explicitly enables it, video AI assets: only generate_video with model wan-3.0-prime (reference image required); "
+                              "image AI assets: only generate_image with model gpt-image-2.5-sunburst or gpt-image-2.5-flare; "
+                              "both accepted only as original non-watermarked files — never default an image model to wan; "
+                              "never for floorplans/interiors/views/neighborhood; every AI asset carries the AI生成 label"})
     return {"entries": len(entries), "flova": bool((brief.get("flova") or {}).get("allowed"))}

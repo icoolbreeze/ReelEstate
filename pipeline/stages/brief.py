@@ -15,7 +15,7 @@ CN_NUM = {"一": 1, "两": 2, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6}
 CITIES = ["北京", "上海", "广州", "深圳", "成都", "杭州", "重庆", "武汉", "西安", "南京", "苏州", "天津", "长沙", "郑州",
           "青岛", "厦门", "合肥", "昆明", "宁波", "佛山", "东莞", "济南", "沈阳", "大连", "福州", "无锡", "贵阳", "南宁"]
 COMMUNITY_RE = re.compile(r"([\u4e00-\u9fa5A-Za-z0-9]{2,12}?(?:小区|花园|家园|苑|府|城|庭|公寓|湾|郡|里|公馆|名邸|广场|雅居|新村|大厦))")
-STYLE_WORDS = {"mediastorm": ["影视飓风", "飓风", "mediastorm"], "qiuzhi": ["秋芝", "qiuzhi"]}
+STYLE_WORDS = {"mediastorm": ["影视飓风", "飓风", "mediastorm"]}
 ORIENTS = ["南北通透", "朝南", "朝北", "朝东", "朝西", "东南", "西南", "东北", "西北"]
 
 # The complete list of things the agent must settle with the user (rules/workflow.md keeps the same list).
@@ -23,24 +23,26 @@ QUESTION_BANK = {
     "category": ("这条视频是 租赁 / 二手房 / 新房 哪一类？", "parse"),
     "listing.target": ("给我房源编号（CRM listing id），或小区名 + 筛选条件（户型/租金或总价/面积/朝向）。", "listing:fetch"),
     "listing.pick": ("列表墙里要重点讲哪一套？（给卡片序号 c01… 或房源编号）", "listing:fetch"),
-    "style": ("用哪个风格：qiuzhi（秋芝）还是 mediastorm（影视飓风）？", "script"),
     "voice.mode": ("配音用 AI（edge-tts 草稿 / qwen 本地）还是你自己录？AI 声音需要声音本人书面授权放 consent/，发布时勾 AI 标注。", "tts"),
     "consent.owner": ("业主书面委托/授权书放进 consent/ 了吗？（二手房必须；租赁中介发布同样需要）", "check"),
     "disclosures": ("必须公示的信息：二手房核验码 / 租赁房源核验或登记备案编号（当地要求）、价格有效期、中介机构全称、出镜人是否认证本人。", "check"),
-    "flova": ("flova 默认开启（装饰/转场片段 + 地图底图重绘），积分由 flova MCP 自行处理、不设限；需要关闭吗？（不能用于生成户型/实景/景观/周边）", "assets:import"),
+    "flova": ("flova 生图默认开启（地图底图重绘 + 装饰图；按用途用 GPT Image 2.5 Sunburst（成片/精修/品牌图）或 Flare（日常/批量/社媒/试错）），积分由 flova MCP 自行处理、不设限；需要关闭吗？视频生成（generate_video / WAN 3.0 Prime）默认关闭，只有你明确写 flova.video_allowed=true 才会用。（不能用于生成户型/实景/景观/周边）", "assets:import"),
     "photos.exclude": ("有没有要排除的实勘照片（有人像、门牌、平台水印、杂乱的）？", "listing:fetch"),
     "platform": ("发布平台：抖音、视频号，还是都发？", "script"),
 }
 
 
 def normalize_flova(brief: dict) -> dict:
-    """flova is default-on; credits are handled by the flova MCP and are NOT a limit.
+    """flova image generation is default-on; credits are handled by the flova MCP and are NOT a limit.
 
     Old briefs may still carry flova.credit_budget: it is ignored (dropped). An explicit allowed=false is kept.
+    Video generation (generate_video, wan-3.0-prime, ...) is default OFF: flova.video_allowed is False unless the
+    user explicitly set it to true (only the literal boolean True counts; anything else is coerced to False).
     """
     fl = brief.setdefault("flova", {})
     fl.pop("credit_budget", None)
     fl.setdefault("allowed", True)
+    fl["video_allowed"] = fl.get("video_allowed") is True
     return brief
 
 
@@ -111,7 +113,7 @@ def parse_sentence(sentence: str) -> dict:
         "created_at": now_iso(),
         "slug": f"auto-{slug_hash}",
         "category": category,
-        "style": detect_style(s),
+        "style": detect_style(s) or "mediastorm",
         "ratio": "4x3",
         "listing": {
             "source": "crm",
@@ -123,7 +125,7 @@ def parse_sentence(sentence: str) -> dict:
             "pick": listing_id,
         },
         "voice": {"mode": voice, "edge_voice": "zh-CN-YunxiNeural", "rate": "+15%"},
-        "flova": {"allowed": True},
+        "flova": {"allowed": True, "video_allowed": False},
         "photos": {"exclude": []},
         "platform": platforms,
         "map": {"query": None, "city": city, "source": "amap"},
@@ -147,8 +149,6 @@ def open_questions(brief: dict, project_dir=None) -> list[dict]:
         add("listing.target")
     if not lst.get("pick"):
         add("listing.pick")
-    if not brief.get("style"):
-        add("style")
     if not (brief.get("voice") or {}).get("mode"):
         add("voice.mode")
     if not brief.get("platform"):

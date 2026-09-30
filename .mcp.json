@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "flova-image": {
+      "type": "stdio",
+      "command": "C:/Program Files/nodejs/node.exe",
+      "args": ["C:/Users/shipi/.flova-mcp/server.js"],
+      "env": {
+        "FLOVA_BIN": "C:/Users/shipi/AppData/Local/Programs/flova/flova.exe"
+      }
+    }
+  }
+}

@@ -24,8 +24,8 @@ QWEN_TTS_BIN=C:\Users\shipi\vswp\ReelEstate\vendor\qwentts.cpp\build\Release\qwe
 QWEN_TTS_MODELS=C:\Users\shipi\.lmstudio\models\Serveurperso\Qwen3-TTS-GGUF
 QWEN_TTS_TALKER=qwen-talker-1.7b-voicedesign-Q8_0.gguf
 QWEN_TTS_CODEC=qwen-tokenizer-12hz-Q8_0.gguf
-QWEN_TTS_BASE_TALKER=qwen-talker-1.7b-base-Q8_0.gguf              # 未下载
-QWEN_TTS_CUSTOMVOICE_TALKER=qwen-talker-1.7b-customvoice-Q8_0.gguf # 未下载
+QWEN_TTS_BASE_TALKER=qwen-talker-1.7b-base-Q8_0.gguf              # 未下载（仅克隆模式）
+QWEN_TTS_CUSTOMVOICE_TALKER=qwen-talker-1.7b-customvoice-Q8_0.gguf # 已下载
 ```
 
 ## 3. 测试一句话
@@ -53,7 +53,7 @@ npm run tts -- projects/resale/<id> --only s02,s04 --seed 42
 | 模式 | talker 模型 | 参数 | 状态 |
 |---|---|---|---|
 | `voicedesign` | `qwen-talker-1.7b-voicedesign-*.gguf` | `--instruct "<音色描述>"`（`voices/presets.json`） | 模型已下载；**中文描述效果待实测**（上游示例为英文描述） |
-| `customvoice` | `qwen-talker-*-customvoice-*.gguf` | `--speaker <名字>`（如上游示例 `vivian`） | 模型未下载 |
+| `customvoice` | `qwen-talker-*-customvoice-*.gguf` | `--speaker <名字>`（如上游示例 `vivian`） | 模型已下载；预置音色名待实测 |
 | `clone`（base） | `qwen-talker-*-base-*.gguf` | `--ref-wav ref.wav --ref-text ref.txt`，或预编码 `--ref-spk/--ref-rvq` | 模型未下载 |
 
 说明：

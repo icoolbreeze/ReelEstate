@@ -25,14 +25,14 @@ export const Captions: React.FC<{ text: string }> = ({ text }) => {
           fontFamily: FONT_FAMILY,
           fontSize: width * (portrait ? 0.045 : 0.03),
           fontWeight: 700,
-          color: TEXT,
-          textAlign: "center",
-          lineHeight: 1.35,
-          padding: "0.25em 0.7em",
-          background: "rgba(0,0,0,0.55)",
-          borderRadius: 10,
-          textShadow: "0 2px 6px rgba(0,0,0,0.6)",
-        }}
+        color: TEXT,
+        textAlign: "center",
+        lineHeight: 1.35,
+        padding: "0.25em 0.7em",
+        background: "rgba(255,255,255,0.9)",
+        borderRadius: 10,
+        boxShadow: "0 6px 20px rgba(30,40,60,0.14)",
+      }}
       >
         {text}
       </div>

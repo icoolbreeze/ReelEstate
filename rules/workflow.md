@@ -11,7 +11,7 @@ npm run make -- --project projects/rental/<id> --answer listing.pick=c03 --answe
 阶段：parse → listing:fetch → listing:wall → map:fetch → assets:import → script → tts → check → render。
 每个阶段幂等、可单独重跑（`npm run map:fetch -- projects/rental/<id> --force`）。
 script 阶段的兜底稿只是骨架：**Agent 必须按 `rules/style/<preset>.md` 重写口播与 `shots.json`**，并保证与近期视频不同。
-**地图是每条视频的必选镜头**（overview / commute / amenities）；flova 默认开启、积分不设限，地图底图重绘由 Agent 用 flova 完成（`map:fetch` 写 `map/flova_request.json`，无 `map/base_ai.png` 时退出码 3）——见 AGENTS.md §3E。
+**地图是每条视频的必选镜头**（overview / commute / amenities）；flova 生图默认开启、积分不设限，地图底图由 Agent 用 flova 图像生成重绘（`generate_image`，gpt-image-2.5，profile kid4，original:true）：`map:fetch` 写 `map/flova_request.json`，无 `map/base_ai.png` 时退出码 3，代码再叠标签/距离，署名“示意图 / AI 生成底图 / © 高德地图”——见 AGENTS.md §3E。**视频生成默认关闭**（`flova.video_allowed=false`）：用户没有明确开启，不得调 `generate_video`，不得生成任何视频（含地图动画、装饰、转场）。
 详细说明见 `docs/one-sentence-workflow.md` 与 AGENTS.md §3A–3E。下面是手工流程（仍然有效）。
 
 

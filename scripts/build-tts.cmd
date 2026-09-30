@@ -13,12 +13,15 @@ rem   - CPU only: drop the GGML_CUDA / CUDA_ARCHITECTURES flags entirely (slow)
 rem ============================================================
 setlocal
 
+rem Prefer VS 2022 Professional, fall back to VS 2019 BuildTools.
 set "VCVARS=C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat"
+if not exist "%VCVARS%" set "VCVARS=C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
 if not exist "%VCVARS%" (
-  echo [build-tts] vcvars64.bat not found: %VCVARS%
+  echo [build-tts] vcvars64.bat not found in VS 2022 Professional or VS 2019 BuildTools.
   echo [build-tts] Edit VCVARS in scripts\build-tts.cmd to match your Visual Studio install.
   exit /b 1
 )
+echo [build-tts] Using %VCVARS%
 call "%VCVARS%"
 
 cd /d "%~dp0..\vendor\qwentts.cpp"

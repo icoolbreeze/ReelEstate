@@ -25,7 +25,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from reel_common import REPO_ROOT, load_env, load_json, resolve_project_dir, save_json, setup_console  # noqa: E402
+from reel_common import REPO_ROOT, env_with_cuda, load_env, load_json, resolve_project_dir, save_json, setup_console  # noqa: E402
 
 PRESETS_FILE = REPO_ROOT / "voices" / "presets.json"
 BUILD_HINT = "请先编译 qwen-tts：在仓库根目录运行 scripts\\build-tts.cmd（见 docs/tts.md）"
@@ -163,7 +163,7 @@ def main(argv=None) -> int:
         print(f"▶ {sid}: {text}")
         try:
             with open(prompt_path, "rb") as stdin:
-                proc = subprocess.run(cmd, stdin=stdin)
+                proc = subprocess.run(cmd, stdin=stdin, env=env_with_cuda())
         finally:
             Path(prompt_path).unlink(missing_ok=True)
         if proc.returncode != 0 or not out.exists():

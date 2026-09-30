@@ -7,7 +7,7 @@ import { src, W } from "./util";
 /**
  * Talking head. `startFrom` = global frame of the shot so the clip plays continuously across cuts.
  * fullscreen fills the frame; pip-left / pip-right is a corner window kept inside the platform safe area.
- * mediastorm: hard cut (no entrance); qiuzhi: spring pop, circular window with ring.
+ * The motion (hard cut vs spring pop) and window shape come from the StyleTokens (st.motion / st.pip).
  */
 export const StylePresenter: React.FC<{ clip: string; mode: ShotPresenter; st: StyleTokens; startFrom: number }> = ({ clip, mode, st, startFrom }) => {
   const f = useCurrentFrame();

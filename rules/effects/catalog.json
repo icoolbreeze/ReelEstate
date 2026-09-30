@@ -53,7 +53,6 @@
         114
       ],
       "styles": [
-        "qiuzhi",
         "mediastorm"
       ],
       "ported": true
@@ -75,7 +74,6 @@
         84
       ],
       "styles": [
-        "qiuzhi",
         "mediastorm"
       ],
       "ported": true
@@ -97,7 +95,6 @@
         90
       ],
       "styles": [
-        "qiuzhi",
         "mediastorm"
       ],
       "ported": true
@@ -119,7 +116,6 @@
         60
       ],
       "styles": [
-        "qiuzhi",
         "mediastorm"
       ],
       "ported": true
@@ -141,7 +137,6 @@
         90
       ],
       "styles": [
-        "qiuzhi",
         "mediastorm"
       ],
       "ported": true
@@ -163,7 +158,6 @@
         120
       ],
       "styles": [
-        "qiuzhi",
         "mediastorm"
       ],
       "ported": true
@@ -185,7 +179,6 @@
         72
       ],
       "styles": [
-        "qiuzhi",
         "mediastorm"
       ],
       "ported": true,
@@ -208,7 +201,6 @@
         120
       ],
       "styles": [
-        "qiuzhi",
         "mediastorm"
       ],
       "ported": true
@@ -230,7 +222,6 @@
         90
       ],
       "styles": [
-        "qiuzhi",
         "mediastorm"
       ],
       "ported": true
@@ -252,7 +243,6 @@
         120
       ],
       "styles": [
-        "qiuzhi",
         "mediastorm"
       ],
       "ported": true
@@ -274,7 +264,6 @@
         60
       ],
       "styles": [
-        "qiuzhi",
         "mediastorm"
       ],
       "ported": true
@@ -296,7 +285,6 @@
         120
       ],
       "styles": [
-        "qiuzhi",
         "mediastorm"
       ],
       "ported": true
@@ -318,7 +306,6 @@
         120
       ],
       "styles": [
-        "qiuzhi",
         "mediastorm"
       ],
       "ported": true
@@ -340,7 +327,6 @@
         72
       ],
       "styles": [
-        "qiuzhi",
         "mediastorm"
       ],
       "ported": true,
@@ -363,54 +349,9 @@
         90
       ],
       "styles": [
-        "qiuzhi",
         "mediastorm"
       ],
       "ported": true
-    },
-    {
-      "id": "clock-wipe",
-      "name": "Clock Wipe",
-      "source_card": "wipe-transitions",
-      "source": "shotcraft",
-      "pool": "transition",
-      "tags": [
-        "transition",
-        "wipe",
-        "clock"
-      ],
-      "energy": "medium",
-      "duration_frames": [
-        24,
-        48
-      ],
-      "styles": [
-        "qiuzhi"
-      ],
-      "ported": true,
-      "note": "mediastorm is hard-cut only (rules/style/mediastorm.md §4), so transitions are qiuzhi-only."
-    },
-    {
-      "id": "color-block-wipe",
-      "name": "Color Block Step Wipe",
-      "source_card": "color-block-step-wipe",
-      "source": "shotcraft",
-      "pool": "transition",
-      "tags": [
-        "transition",
-        "wipe",
-        "accent"
-      ],
-      "energy": "high",
-      "duration_frames": [
-        18,
-        36
-      ],
-      "styles": [
-        "qiuzhi"
-      ],
-      "ported": true,
-      "note": "mediastorm is hard-cut only (rules/style/mediastorm.md §4), so transitions are qiuzhi-only."
     },
     {
       "id": "list-reveal",
@@ -429,7 +370,6 @@
         108
       ],
       "styles": [
-        "qiuzhi",
         "mediastorm"
       ],
       "ported": true
@@ -451,7 +391,6 @@
         90
       ],
       "styles": [
-        "qiuzhi",
         "mediastorm"
       ],
       "ported": true
@@ -473,7 +412,6 @@
         100
       ],
       "styles": [
-        "qiuzhi",
         "mediastorm"
       ],
       "ported": true
@@ -495,7 +433,6 @@
         72
       ],
       "styles": [
-        "qiuzhi",
         "mediastorm"
       ],
       "ported": true,

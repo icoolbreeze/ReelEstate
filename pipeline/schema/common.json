@@ -258,7 +258,6 @@
     },
     "style": {
       "enum": [
-        "qiuzhi",
         "mediastorm"
       ]
     }

@@ -1,7 +1,6 @@
 import React from "react";
 import { AbsoluteFill, OffthreadVideo, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import type { PresenterMode } from "../types";
-import { FONT_FAMILY, MUTED } from "./theme";
 
 type Props = {
   mode: PresenterMode;
@@ -13,6 +12,7 @@ type Props = {
 /**
  * The creator's talking-head footage. fullscreen fills the frame; pip-left / pip-right
  * is a small rounded window in the bottom corner (above InfoBar / captions).
+ * Without a clip there is nothing to show — callers render Backdrop instead.
  */
 export const PresenterFrame: React.FC<Props> = ({ mode, clip, clipStart = 0, accent }) => {
   const frame = useCurrentFrame();
@@ -20,28 +20,14 @@ export const PresenterFrame: React.FC<Props> = ({ mode, clip, clipStart = 0, acc
   const portrait = height > width;
   const enter = spring({ frame, fps, config: { damping: 200 }, durationInFrames: 12 });
 
-  const body = clip ? (
+  if (!clip) return null;
+
+  const body = (
     <OffthreadVideo
       src={staticFile(clip)}
       trimBefore={Math.round(clipStart * fps)}
       style={{ width: "100%", height: "100%", objectFit: "cover" }}
     />
-  ) : (
-    <AbsoluteFill
-      style={{
-        background: `radial-gradient(circle at 50% 38%, #3a4252 0%, #1b2029 70%)`,
-        alignItems: "center",
-        justifyContent: "center",
-        fontFamily: FONT_FAMILY,
-        color: MUTED,
-      }}
-    >
-      <div style={{ width: "22%", aspectRatio: "1", borderRadius: "50%", background: "#4a5366" }} />
-      <div style={{ width: "40%", height: "22%", marginTop: "2%", borderRadius: "40% 40% 0 0", background: "#4a5366" }} />
-      <div style={{ position: "absolute", top: "6%", fontSize: mode === "fullscreen" ? width * 0.018 : width * 0.012 }}>
-        主播画面占位（raw/ 口播素材）
-      </div>
-    </AbsoluteFill>
   );
 
   if (mode === "fullscreen") {

@@ -368,6 +368,24 @@ def check_pii(p: dict, r: Report, project_dir: Path) -> None:
         r.ok(sec, "未发现电话/微信/姓名、精确楼层、楼栋单元房号、详细门牌、CRM 编号、贝壳链家字样")
 
 
+# AI model allowlist (config/flova-models.json): one video model; two image models picked by purpose.
+AI_VIDEO_EXTS = (".mp4", ".mov", ".webm")
+AI_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+AI_VIDEO_MODEL = "wan-3.0-prime"
+AI_IMAGE_MODELS = ("gpt-image-2.5-sunburst", "gpt-image-2.5-flare")
+
+
+def _video_allowed(project_dir: Path) -> bool:
+    """Video generation is OFF by default: only an explicit brief.flova.video_allowed == true enables it."""
+    bp = project_dir / "brief.json"
+    if not bp.exists():
+        return False
+    try:
+        return ((load_json(bp).get("flova") or {}).get("video_allowed")) is True
+    except Exception:
+        return False
+
+
 def check_assets(p: dict, r: Report, project_dir: Path) -> None:
     sec = "素材清单"
     man_p = project_dir / "assets" / "manifest.json"
@@ -410,6 +428,18 @@ def check_assets(p: dict, r: Report, project_dir: Path) -> None:
                 r.fail(sec, f"{a.get('file')} 是 AI 素材，必须记录 model 与 prompt")
             if a.get("usage") not in ("decorative", "transition"):
                 r.fail(sec, f"{a.get('file')} 是 AI 素材，usage 只能是 decorative/transition（不得用于户型/实景/景观/周边）")
+            ext = Path(str(a.get("file") or "")).suffix.lower()
+            if ext in AI_VIDEO_EXTS:
+                if not _video_allowed(project_dir):
+                    r.fail(sec, f"{a.get('file')} 是 AI 视频，但视频生成默认关闭（brief.flova.video_allowed 不是 true）；用户没有明确开启就不得生成/使用 AI 视频")
+                elif a.get("model") != AI_VIDEO_MODEL:
+                    r.fail(sec, f"{a.get('file')} 是 AI 视频，model 只能是 {AI_VIDEO_MODEL}（当前：{a.get('model')}）")
+            elif ext in AI_IMAGE_EXTS:
+                if a.get("model") not in AI_IMAGE_MODELS:
+                    r.fail(sec, f"{a.get('file')} 是 AI 图片，model 只能是 {AI_IMAGE_MODELS[0]} 或 {AI_IMAGE_MODELS[1]}（当前：{a.get('model')}）")
+            else:
+                r.fail(sec, f"{a.get('file')} 是 AI 素材但扩展名“{ext or '无'}”不受支持：视频（{'/'.join(AI_VIDEO_EXTS)}）只允许 "
+                            f"{AI_VIDEO_MODEL}；图片（{'/'.join(AI_IMAGE_EXTS)}）只允许 {AI_IMAGE_MODELS[0]} 或 {AI_IMAGE_MODELS[1]}")
     if not missing and not wm:
         r.ok(sec, f"素材清单 {len(assets)} 条，引用文件均已登记且无水印")
     if any(a.get("ai") for a in assets):
@@ -493,16 +523,26 @@ def check_map_shots(p: dict, r: Report, project_dir: Path) -> None:
     elif geo and geo.get("live_status") != "ok" and "示意图" not in attr:
         bad(sec, "底图是示意图：署名必须含“示意图 / 示意底图 / © 高德地图”")
     if (geo.get("repaint") or {}).get("status") == "pending":
-        bad(sec, "flova 地图底图重绘未完成（map/flova_request.json 待办）：调 flova 保存 map/base_ai.png 后重跑 map:fetch")
+        bad(sec, "flova 地图底图重绘未完成（map/flova_request.json 待办）：用 generate_image（gpt-image-2.5 系列，profile kid4，original:true，"
+                 "参考图 map/static.png）重绘并保存 map/base_ai.png 后重跑 map:fetch；不要生成视频")
+    req_p = project_dir / "map" / "flova_request.json"
+    if req_p.exists() and not _video_allowed(project_dir):
+        try:
+            req = load_json(req_p)
+        except Exception:
+            req = {}
+        if req.get("tool") == "generate_video" or any(k in req for k in ("output_video", "reference_image")) \
+                or "wan" in str(req.get("model") or "").lower():
+            r.fail(sec, "map/flova_request.json 是视频生成请求，但视频生成默认关闭（brief.flova.video_allowed 不是 true）：删除该请求，地图只走图片重绘")
 
 
 def check_style(p: dict, r: Report) -> None:
     sec = "风格"
     style = p.get("style")
     if style in (None, ""):
-        r.warn(sec, "未设置 style（qiuzhi / mediastorm）；将回退为 qiuzhi")
-    elif style not in ("qiuzhi", "mediastorm"):
-        r.fail(sec, f"未知 style：{style}（应为 qiuzhi 或 mediastorm）")
+        r.warn(sec, "未设置 style；将按 mediastorm（影视飓风）处理")
+    elif style != "mediastorm":
+        r.fail(sec, f"未知 style：{style}（应为 mediastorm）")
     else:
         r.ok(sec, f"风格：{style}")
 

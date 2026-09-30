@@ -1,0 +1,12 @@
+{
+  "source": "amap",
+  "coord": "gcj02",
+  "script": "",
+  "script_candidates": [
+    "vendor/map-tools/scripts/map.py",
+    "~/.agents/skills/map-tools/scripts/map.py"
+  ],
+  "keys": "~/.config/map-tools/keys.json",
+  "commands": ["place", "satellite", "staticmap", "route"],
+  "note": "密钥只放 keys 指向的本机文件。不得打印或提交。"
+}

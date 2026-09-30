@@ -1,0 +1,17 @@
+{
+  "video": {
+    "enabled_by_default": false,
+    "requires": "brief.flova.video_allowed=true (user explicit); otherwise never call generate_video",
+    "tool": "generate_video",
+    "model": "wan-3.0-prime",
+    "when": ["装饰", "转场"]
+  },
+  "image": {
+    "tool": "generate_image",
+    "original": true,
+    "models": {
+      "gpt-image-2.5-sunburst": ["成片", "精细改图", "品牌/产品图"],
+      "gpt-image-2.5-flare": ["日常出图", "批量", "社媒", "快速试错"]
+    }
+  }
+}

@@ -1,7 +1,7 @@
 """One-sentence → video fixed workflow.
 
 Usage:
-  python pipeline/make.py "<一句话>" [--style qiuzhi|mediastorm] [--ratio 4x3]
+  python pipeline/make.py "<一句话>" [--style mediastorm] [--ratio 4x3]
          [--category rental|resale|new-home] [--mock] [--force] [--until STAGE]
          [--project projects/rental/<id>]   # resume / re-run on an existing project
          [--answer key=value ...]          # fill brief.answers / brief fields
@@ -11,8 +11,10 @@ Stages (idempotent; skip if outputs exist unless --force):
   1 listing:fetch    → listing.json + raw/listing/*
   2 listing:wall     → wall.json + raw/wall/*
   3 map:fetch        → map/geo.json + satellite_4x3.jpg + static.png + pois.json + route.json
-                       (mandatory; flova repaint is agent-performed: writes map/flova_request.json and exits 3
-                        until map/base_ai.png exists; --mock / flova.allowed=false use the labelled placeholder)
+                       (mandatory; flova IMAGE repaint is agent-performed: map:fetch writes map/flova_request.json
+                        (generate_image, gpt-image-2.5, profile kid4, original) and exits 3 until map/base_ai.png
+                        exists; no video generation (flova.video_allowed defaults to false);
+                        --mock / flova.allowed=false use the labelled placeholder)
   4 assets:import    → assets/manifest.json (+ seed warehouse stock)
   4b effects         → effects.json (curated seeded effect picks; --reseed to redraw)
   5 script           → project.json + shots.json  (agent should rewrite; fallback provided)
@@ -87,7 +89,7 @@ def _apply_answers(brief: dict, answers: list[str]) -> None:
             brief.setdefault("voice", {})[k.split(".", 1)[1]] = v
         elif k.startswith("flova."):
             brief.setdefault("flova", {})[k.split(".", 1)[1]] = (v.lower() in ("1", "true", "yes") if "allow" in k else v)
-            if "allow" in k and brief["flova"].get("allowed"):
+            if k == "flova.allowed" and brief["flova"].get("allowed"):
                 confirmed.add("flova")
         elif k.startswith("map."):
             brief.setdefault("map", {})[k.split(".", 1)[1]] = v
@@ -144,7 +146,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="一句话成片")
     ap.add_argument("sentence", nargs="?", help="一句话需求；与 --project 二选一")
     ap.add_argument("--project", help="已有项目目录，续跑 / 重跑")
-    ap.add_argument("--style", choices=["qiuzhi", "mediastorm"])
+    ap.add_argument("--style", choices=["mediastorm"], help="固定 mediastorm（影视飓风）；默认即 mediastorm")
     ap.add_argument("--ratio", choices=["4x3", "3x4", "9x16"], default="4x3")
     ap.add_argument("--category", choices=["rental", "resale", "new-home"])
     ap.add_argument("--mock", action="store_true", help="强制用虚构 listing fixture（不打 CRM）")
@@ -205,7 +207,7 @@ def main(argv=None) -> int:
     print(f"  分类：{category}  风格：{brief.get('style')}  画幅：{brief.get('ratio')}")
 
     # Gate: if still missing critical answers and not --mock, stop before stages that need them.
-    blocking = [q for q in brief["questions"] if q["key"] in ("category", "listing.target", "style", "voice.mode")]
+    blocking = [q for q in brief["questions"] if q["key"] in ("category", "listing.target", "voice.mode")]
     if blocking and not args.mock and not args.only:
         print("\n⏸ 还缺以下信息，请先问用户，再用 --answer key=value 回填后重跑：")
         for q in brief["questions"]:

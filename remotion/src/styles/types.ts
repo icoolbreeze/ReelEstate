@@ -24,8 +24,8 @@ export type StyleTokens = {
   pip: { w: number; h: number; radius: number; ring: string; margin: number; bottom: number; shape: "rect" | "circle" };
   caption: { size: number; weight: number; color: string; shadow: string; box?: string; bottom: number };
   textGlow: string;
-  hardShadow?: string; // qiuzhi: hard offset shadow on titles
-  motion: "cut" | "spring"; // cut = hard-cut in with shot (mediastorm), spring = bouncy morphs (qiuzhi)
+  hardShadow?: string; // hard offset shadow on titles
+  motion: "cut" | "spring"; // cut = hard-cut in with shot (mediastorm), spring = bouncy morphs
   enterFrames: number; // text card entrance length (4-12 frames for mediastorm)
   secondaryDelay: number; // secondary lines start (+12-18 frames)
   loudnessLufs: number;

@@ -114,5 +114,5 @@
     "min_lease_months": 12,
     "_comment": "rent_type：整租/合租；合租须填 room_desc（出租哪间、面积口径）"
   },
-  "style": "qiuzhi"
+  "style": "mediastorm"
 }

@@ -65,6 +65,25 @@ def save_json(path: Path, obj) -> None:
         f.write("\n")
 
 
+def cuda_path() -> str | None:
+    """Locate the CUDA toolkit bin dir (CUDA_PATH env, else newest standard install)."""
+    cuda_path_env = os.environ.get("CUDA_PATH")
+    if cuda_path_env and (Path(cuda_path_env) / "bin").is_dir():
+        return str(Path(cuda_path_env) / "bin")
+    base = Path(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA")
+    versions = sorted(p for p in base.glob("v*") if (p / "bin").is_dir()) if base.is_dir() else []
+    return str(versions[-1] / "bin") if versions else None
+
+
+def env_with_cuda() -> dict[str, str]:
+    """Env for a CUDA-linked exe: its delay-loaded cudart/cublas need CUDA bin on PATH."""
+    env = dict(os.environ)
+    cu = cuda_path()
+    if cu:
+        env["PATH"] = cu + os.pathsep + env.get("PATH", "")
+    return env
+
+
 def strip_comments(obj):
     """Remove keys starting with '_' recursively (comment fields)."""
     if isinstance(obj, dict):

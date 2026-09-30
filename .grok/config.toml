@@ -1,0 +1,9 @@
+[mcp_servers.flova-image]
+command = "C:/Program Files/nodejs/node.exe"
+args = ["C:/Users/shipi/.flova-mcp/server.js"]
+enabled = true
+startup_timeout_sec = 30
+tool_timeout_sec = 1800
+
+[mcp_servers.flova-image.env]
+FLOVA_BIN = "C:/Users/shipi/AppData/Local/Programs/flova/flova.exe"

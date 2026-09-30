@@ -123,9 +123,6 @@ def main(argv=None, still_default=False) -> int:
         return proc.returncode
     if not (args.still or still_default) and out.exists():
         target = -16.0
-        style = props.get("style") or (props.get("shots") or {}).get("style")
-        if style == "qiuzhi":
-            target = -17.0
         tmp = out.with_suffix(".ln.mp4")
         af = f"loudnorm=I={target}:TP=-1.5:LRA=11"
         probe = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(out), "-af", af + ":print_format=json", "-f", "null", "-"],
