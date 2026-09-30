@@ -207,6 +207,9 @@ Every shot has a camera or subject motion channel. **[HARD]** no fully static wi
 - Highlights/sweeps ≤1 per shot, clipped to the element's radius.
 - The same transition style does not run on two consecutive cuts.
 
+### 7.6 Motion feel (Disney principles)
+See [`rules/motion.md`](motion.md): numeric motion-feel rules (easing, anticipation, overshoot ≤4%, settle ≤8 f, stagger 2-4 f, key-number hold ≥18 f), a per-effect table for all 19 catalog effects, and a review checklist. Where it is stricter than §7.1 / §1.A (overshoot, settle), motion.md wins.
+
 ---
 
 ## 8. Post-render harmony check [HARD]
