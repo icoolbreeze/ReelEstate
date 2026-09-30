@@ -2,6 +2,12 @@
 
 Calls the map-tools skill script. Never prints API keys. Falls back to a schematic satellite
 placeholder when keys / network fail; live_status is recorded so the sample report is accurate.
+
+The map is a mandatory part of every video. Extra outputs: map/route.json (Amap route distance/duration,
+only Amap-returned numbers) and the flova repaint hand-off: flova is an MCP that only the agent can call, so
+this stage writes map/flova_request.json and exits 3 (NeedInput) until the agent saved map/base_ai.png.
+--mock / flova.allowed=false / no live Amap data: no repaint, labelled placeholder or real Amap imagery is kept.
+Credits are handled by the flova MCP and are never a limit; failures are surfaced to the user, not worked around.
 """
 from __future__ import annotations
 
@@ -12,7 +18,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .common import load_brief, load_json, now_iso, save_json
+from .common import NeedInput, load_brief, load_json, now_iso, save_json
 
 DEFAULT_MAP_PY = Path.home() / ".agents" / "skills" / "map-tools" / "scripts" / "map.py"
 ATTRIBUTION = "地图数据 © 高德地图（示意，非测绘成果）"
@@ -83,6 +89,151 @@ def _placeholder_satellite(out: Path, label: str) -> None:
     im.save(out, quality=90)
 
 
+ATTR_AI = "示意图 / AI 生成底图 / © 高德地图"
+ATTR_SCHEMATIC = "示意图 / 示意底图（非真实地图）/ © 高德地图"
+FLOVA_PARAMS = {"profile": "kid4", "original": True}  # generation + original non-watermarked image only
+FLOVA_PROMPT = (
+    "Restyle this Amap road map into a clean, bright, low-saturation illustrated map for a real-estate short "
+    "video. Keep the road network, water bodies, blocks and the centre marker exactly where they are. Do not add, "
+    "remove, move or invent roads, buildings, landmarks or text. No labels, no logos, no watermark, no people. "
+    "4:3 landscape."
+)
+
+
+def _is_mock(brief: dict, listing: dict) -> bool:
+    return (brief.get("listing") or {}).get("source") == "mock" or (listing or {}).get("source") == "mock"
+
+
+def _sha1_file(p: Path) -> str:
+    import hashlib
+    return hashlib.sha1(p.read_bytes()).hexdigest()[:12]
+
+
+def _json_from(out: str):
+    a, b = out.find("{"), out.rfind("}")
+    return json.loads(out[a: b + 1]) if a >= 0 and b > a else None
+
+
+def _fetch_routes(map_py: Path, geo: dict, pois: list, brief: dict, city: str, route_p: Path) -> None:
+    """map/route.json: Amap route distance/duration from the community to the nearest metro (+ map.commute_to)."""
+    items, notes = [], []
+    origin = f"{geo['lng']},{geo['lat']}"
+    targets = []
+    metro = [x for x in pois if x.get("location") and x.get("distance_m") and ("地铁" in str(x.get("name")) or "地铁" in str(x.get("type")))]
+    if metro:
+        m = min(metro, key=lambda x: x["distance_m"])
+        targets.append(("nearest_metro", m.get("name"), m["location"], "walking"))
+    commute_to = (brief.get("map") or {}).get("commute_to")
+    if commute_to:
+        code, out = _run(map_py, ["place", str(commute_to), "--city", city, "--limit", "1"])
+        try:
+            rows = json.loads(out[out.find("["): out.rfind("]") + 1]) if code == 0 else []
+        except Exception:
+            rows = []
+        if rows and rows[0].get("location"):
+            targets.append(("commute_to", rows[0].get("name") or commute_to, rows[0]["location"], "all"))
+        else:
+            notes.append(f"commute_to 未能解析：{commute_to}")
+    for kind, name, loc, mode in targets:
+        try:
+            code, out = _run(map_py, ["route", origin, loc, "--mode", mode, "--city", city])
+            data = _json_from(out) if code == 0 else None
+            routes = (data or {}).get("routes")
+            routes = routes if isinstance(routes, list) else ([routes] if routes else [])
+            for rt in routes:
+                if rt.get("distance_m") is not None and rt.get("duration_s") is not None:
+                    items.append({"kind": kind, "to": name, "mode": rt.get("mode"), "distance_m": int(rt["distance_m"]),
+                                  "duration_s": int(rt["duration_s"]), "source": "amap route"})
+        except Exception as e:  # network / key problems: no numbers rather than invented ones
+            notes.append(f"route {name}: {e}")
+    save_json(route_p, {"origin": {"lng": geo["lng"], "lat": geo["lat"]}, "items": items, "notes": notes,
+                        "source": "amap", "fetched_at": now_iso()})
+
+
+def _to_4x3_jpg(src: Path, out: Path) -> None:
+    try:
+        from PIL import Image
+        im = Image.open(src).convert("RGB")
+        w, h = im.size
+        if w * 3 > h * 4:  # too wide -> crop width
+            nw = int(h * 4 / 3)
+            im = im.crop(((w - nw) // 2, 0, (w - nw) // 2 + nw, h))
+        else:  # too tall -> crop height
+            nh = int(w * 3 / 4)
+            im = im.crop((0, (h - nh) // 2, w, (h - nh) // 2 + nh))
+        im.resize((1440, 1080)).save(out, quality=92)
+    except ImportError:
+        subprocess.run(["ffmpeg", "-y", "-i", str(src), "-vf", "scale=1440:1080:force_original_aspect_ratio=increase,crop=1440:1080",
+                        str(out)], check=True, capture_output=True)
+
+
+def _repaint_step(project_dir: Path, brief: dict, listing: dict, geo: dict) -> dict:
+    """flova repaint hand-off (agent-performed). Raises NeedInput (exit 3) until map/base_ai.png exists."""
+    map_dir = project_dir / "map"
+    sat_p, base_ai, req_p, geo_p = map_dir / "satellite_4x3.jpg", map_dir / "base_ai.png", map_dir / "flova_request.json", map_dir / "geo.json"
+    amap_copy = map_dir / "amap_satellite_4x3.jpg"
+    live = geo.get("live_status") == "ok"
+    allowed = bool((brief.get("flova") or {}).get("allowed", True))
+    reason = None
+    if not live:
+        reason = "no live Amap data -> labelled schematic base"
+    elif _is_mock(brief, listing):
+        reason = "mock -> no repaint"
+    elif not allowed:
+        reason = "flova.allowed=false -> no repaint"
+    if reason:
+        if live and geo.get("base") == "ai_repaint" and amap_copy.exists():
+            shutil.copy2(amap_copy, sat_p)  # repaint switched off: back to the real Amap imagery
+            geo["attribution"] = ATTRIBUTION
+        geo["base"] = "amap" if live else "schematic"
+        geo["repaint"] = {"status": "skipped", "reason": reason}
+        save_json(geo_p, geo)
+        return {"base": geo["base"], "repaint": "skipped"}
+
+    rel_dir = project_dir.name
+    request = {
+        "purpose": "Repaint the Amap static map into a stylised base map (agent-performed; flova is an MCP, not callable from repo Python)",
+        "tool": "flova image generation (MCP server flova-image, registered in ZCode on the user's PC)",
+        "prompt": FLOVA_PROMPT,
+        "source_image": "map/static.png",
+        "output_image": "map/base_ai.png",
+        "params": dict(FLOVA_PARAMS),
+        "credits": "handled by the flova MCP; not a limit. If generation fails (including for credit reasons) report the error to the user; do not work around it.",
+        "label": ATTR_AI,
+        "status": "pending",
+        "created_at": (load_json(req_p).get("created_at") if req_p.exists() else None) or now_iso(),
+    }
+    if not base_ai.exists():
+        save_json(req_p, request)
+        geo["base"] = "amap"
+        geo["repaint"] = {"status": "pending", "request": "map/flova_request.json"}
+        save_json(geo_p, geo)
+        proj = project_dir.as_posix()
+        text = (
+            f"map:fetch 需要 Agent 用 flova 重绘地图底图（flova 只在用户 PC 的 ZCode MCP 里，仓库 Python 调不了）：\n"
+            f"    1. 读 {proj}/map/flova_request.json（prompt / source_image / output_image / params）\n"
+            f"    2. 调 flova 图像生成 MCP：prompt=request.prompt，参考图={proj}/map/static.png，参数 profile=\"kid4\"、original=true\n"
+            f"    3. 把返回的无水印原图保存为 {proj}/map/base_ai.png\n"
+            f"    4. 重跑同一命令（或 npm run map:fetch -- {proj}）\n"
+            f"    积分由 flova MCP 自行处理，不是限制；若生成失败（含积分原因），把错误原文告诉用户，不要绕过，不要用邀请/多账号等方式。"
+        )
+        print("\n" + text)
+        raise NeedInput([{"key": "map.base_ai", "q": text, "blocks": "map:fetch"}])
+
+    sha = _sha1_file(base_ai)
+    if geo.get("base") != "ai_repaint" or geo.get("base_ai_sha1") != sha:
+        if geo.get("base") != "ai_repaint" and sat_p.exists():
+            shutil.copy2(sat_p, amap_copy)  # keep the real Amap satellite next to the AI base
+        _to_4x3_jpg(base_ai, sat_p)
+        geo.update({"base": "ai_repaint", "base_ai": "map/base_ai.png", "base_ai_sha1": sha, "attribution": ATTR_AI,
+                    "flova_prompt": FLOVA_PROMPT, "flova_params": dict(FLOVA_PARAMS)})
+    request["status"] = "done"
+    save_json(req_p, request)
+    geo["repaint"] = {"status": "done"}
+    save_json(geo_p, geo)
+    return {"base": "ai_repaint", "repaint": "done"}
+
+
 def run(project_dir: Path, force: bool = False) -> dict:
     map_dir = project_dir / "map"
     geo_p = map_dir / "geo.json"
@@ -90,7 +241,9 @@ def run(project_dir: Path, force: bool = False) -> dict:
     static_p = map_dir / "static.png"
     pois_p = map_dir / "pois.json"
     if all(p.exists() for p in (geo_p, sat_p, static_p, pois_p)) and not force:
-        return {"skipped": True}
+        _brief = load_brief(project_dir)
+        _lst = load_json(project_dir / "listing.json") if (project_dir / "listing.json").exists() else {}
+        return {"skipped": True, **_repaint_step(project_dir, _brief, _lst, load_json(geo_p))}
 
     brief = load_brief(project_dir)
     listing = load_json(project_dir / "listing.json")
@@ -137,6 +290,7 @@ def run(project_dir: Path, force: bool = False) -> dict:
                             poi["distance_m"] = None
                     pois = [x for x in pois if x.get("distance_m") and x["distance_m"] <= 3000]
                     save_json(pois_p, {"items": pois, "fetched_at": now_iso()})
+                    _fetch_routes(map_py, geo, pois, brief, city, map_dir / "route.json")
         except Exception as e:
             live_note = str(e)
             live_status = "failed"
@@ -157,7 +311,7 @@ def run(project_dir: Path, force: bool = False) -> dict:
                 {"name": "示例地铁站", "address": "距小区约 850 米（地图测距·示意）", "type": "地铁站"},
                 {"name": "示例公园", "address": "距小区约 600 米（地图测距·示意）", "type": "公园"},
             ], "fetched_at": now_iso(), "live_status": live_status})
-        attribution = "示意底图 · 非真实地图（map:fetch 未联网/未取到坐标）"
+        attribution = ATTR_SCHEMATIC
     else:
         attribution = ATTRIBUTION
 
@@ -167,4 +321,9 @@ def run(project_dir: Path, force: bool = False) -> dict:
     # Ensure static.png exists even on success path when only jpg was written
     if not static_p.exists() and sat_p.exists():
         shutil.copy2(sat_p, static_p)
-    return {"live_status": live_status, "query": query, "attribution": attribution}
+    # Satellite tiles can fail (network/SSL) while the Amap road map worked: the map is mandatory, so use the real road map.
+    if not sat_p.exists() and static_p.exists():
+        shutil.copy2(static_p, sat_p)
+    result = {"live_status": live_status, "query": query, "attribution": attribution}
+    result.update(_repaint_step(project_dir, brief, listing, geo))  # may raise NeedInput (exit 3)
+    return result

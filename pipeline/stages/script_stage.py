@@ -116,6 +116,31 @@ def floor_en(desc: str) -> str:
     return "FLOOR"
 
 
+def _map_role_shots(project_dir: Path, listing: dict) -> list[dict]:
+    """Mandatory map shots by role (overview is built in build_shots): commute + amenities where data exists.
+    Numbers come only from Amap results (map/route.json, map/pois.json). On-screen text is distance only
+    (rules/compliance forbids '分钟到' style position claims); route duration is kept in route_ref for reference."""
+    out = []
+    mock = listing.get("source") == "mock"
+    route_p, pois_p = project_dir / "map" / "route.json", project_dir / "map" / "pois.json"
+    routes = [x for x in (load_json(route_p).get("items") or []) if x.get("distance_m")] if route_p.exists() else []
+    if routes:
+        it = sorted(routes, key=lambda x: (x.get("kind") != "commute_to", {"driving": 0, "transit": 1}.get(x.get("mode"), 2)))[0]  # commute target first; drive/transit before walking
+        mode_zh = {"walking": "步行", "driving": "驾车", "transit": "公交"}.get(it.get("mode"), "")
+        out.append({"id": "sh11", "segment": "s05", "weight": 1.2, "type": "map", "presenter": "none", "map_role": "commute",
+                    "location": {"main": it.get("to") or "通勤目的地", "sub": f"约 {int(it['distance_m'])} 米 · 高德{mode_zh}路线距离"},
+                    "route_ref": {"mode": it.get("mode"), "distance_m": it["distance_m"], "duration_s": it.get("duration_s")}})
+    pois = [x for x in (load_json(pois_p).get("items") or []) if x.get("distance_m")] if (pois_p.exists() and not mock) else []
+    if pois:
+        it = min(pois, key=lambda x: x["distance_m"])
+        out.append({"id": "sh12", "segment": "s05", "weight": 1.2, "type": "map", "presenter": "none", "map_role": "amenities",
+                    "location": {"main": it.get("name") or "周边配套", "sub": f"约 {int(it['distance_m'])} 米 · 直线距离（高德坐标测距）"}})
+    elif mock:
+        out.append({"id": "sh12", "segment": "s05", "weight": 1.2, "type": "map", "presenter": "none", "map_role": "amenities",
+                    "location": {"main": "示例地铁站", "sub": "约 850 米 · 直线距离（地图测距·示意）"}})
+    return out
+
+
 def build_shots(brief: dict, listing: dict, wall: dict, project: dict, project_dir: Path) -> dict:
     style = brief.get("style") or "mediastorm"
     rooms = [dict(r, pill=floor_en(listing.get("floor_desc") or "")) for r in DEFAULT_ROOMS]
@@ -160,11 +185,15 @@ def build_shots(brief: dict, listing: dict, wall: dict, project: dict, project_d
         {"id": "sh08", "segment": "s04", "weight": 1.4, "type": "spec", "presenter": "pip-left",
          "media": "raw/stock/highrise.jpg",
          "spec": {"title": "HEADS-UP", "variant": "warning", "lines": ["楼龄偏长，外立面有些旧", "北侧临近主路，有车流噪音", "只有一个卫生间"]}},
-        {"id": "sh09", "segment": "s05", "weight": 1.35, "type": "map", "presenter": "none",
-         "location": {"main": "示例地铁站", "sub": "约 850 米 · 直线距离（地图测距·示意）"}},
+        {"id": "sh09", "segment": "s05", "weight": 1.35, "type": "map", "presenter": "none", "map_role": "overview",
+         "location": {"main": community or "小区", "sub": " · ".join(x for x in (project["property"]["location"].get("city"), project["property"]["location"].get("district")) if x and "待填" not in x) or "位置示意"}},
         {"id": "sh10", "segment": "s05", "weight": 1.0, "type": "outro", "presenter": "fullscreen",
          "cta": "点击下方组件 预约看房"},
     ]
+
+    # Map is mandatory: add the commute / amenities map shots (overview is sh09) before the outro.
+    _i = next((i for i, s in enumerate(shots) if s["id"] == "sh10"), len(shots))
+    shots[_i:_i] = _map_role_shots(project_dir, listing)
 
     # Attach nearby from pois.json when present (objective metres only — no “X分钟”).
     pois_p = project_dir / "map" / "pois.json"

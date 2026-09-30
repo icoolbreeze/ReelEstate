@@ -125,17 +125,22 @@ def scan_existing(project_dir: Path, existing: list[dict]) -> list[dict]:
     # Map imagery
     geo = load_json(project_dir / "map" / "geo.json") if (project_dir / "map" / "geo.json").exists() else {}
     live = geo.get("live_status") == "ok"
+    ai_base = geo.get("base") == "ai_repaint"
     for name, tag_ok, tag_mock in (
         ("map/satellite_4x3.jpg", "素材来源：高德卫星", "示意底图（非真实地图）"),
         ("map/static.png", "素材来源：高德路网", "示意底图（非真实地图）"),
     ):
         p = project_dir / name
         if p.exists() and name not in known:
-            out.append(_entry(name, source="amap" if live else "placeholder",
-                              license="map-provider-terms" if live else "internal-placeholder",
-                              attribution=geo.get("attribution", "地图数据"),
-                              source_tag=tag_ok if live else tag_mock, sha1=_sha1(p),
-                              watermarked=False))
+            entry = _entry(name, source="amap" if live else "placeholder",
+                           license="map-provider-terms" if live else "internal-placeholder",
+                           attribution=geo.get("attribution", "地图数据"),
+                           source_tag=tag_ok if live else tag_mock, sha1=_sha1(p),
+                           watermarked=False)
+            if ai_base and name == "map/satellite_4x3.jpg":  # flova repaint of the Amap map (labelled AI base)
+                entry.update(source="flova", ai=True, model="flova (profile kid4, original)", prompt=geo.get("flova_prompt"),
+                             usage="decorative", source_tag="AI生成底图", license="flova-generated original (non-watermarked)")
+            out.append(entry)
     return out
 
 
@@ -167,11 +172,11 @@ def run(project_dir: Path, force: bool = False) -> dict:
                     break
 
     if (brief.get("flova") or {}).get("allowed"):
-        note = "flova allowed — agent must call flova MCP itself (decorative only), then re-run assets:import."
+        note = "flova allowed (credits are not a limit) — agent calls the flova MCP itself: decorative/transition clips and the map base repaint (map:fetch), then re-run assets:import."
     else:
         note = "flova not allowed for this project (decorative AI clips disabled)."
 
     save_json(man, {"assets": entries, "built_at": now_iso(), "note": note,
-                    "policy": "decorative/transition only; never for floorplans/interiors/views/neighborhood; "
-                              "no watermark removal; original:false or paid plan; every AI asset carries AI生成 label"})
+                    "policy": "decorative/transition + the labelled map base repaint only; never for floorplans/interiors/views/neighborhood; "
+                              "no watermark removal; request only the original non-watermarked image (profile kid4, original:true); every AI asset carries AI生成 label"})
     return {"entries": len(entries), "flova": bool((brief.get("flova") or {}).get("allowed"))}

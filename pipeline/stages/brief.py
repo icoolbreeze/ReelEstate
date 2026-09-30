@@ -27,10 +27,21 @@ QUESTION_BANK = {
     "voice.mode": ("配音用 AI（edge-tts 草稿 / qwen 本地）还是你自己录？AI 声音需要声音本人书面授权放 consent/，发布时勾 AI 标注。", "tts"),
     "consent.owner": ("业主书面委托/授权书放进 consent/ 了吗？（二手房必须；租赁中介发布同样需要）", "check"),
     "disclosures": ("必须公示的信息：二手房核验码 / 租赁房源核验或登记备案编号（当地要求）、价格有效期、中介机构全称、出镜人是否认证本人。", "check"),
-    "flova": ("是否允许用 flova 生成装饰/转场片段？积分预算多少？（只能用于装饰，不能生成户型/实景/景观/周边）", "assets:import"),
+    "flova": ("flova 默认开启（装饰/转场片段 + 地图底图重绘），积分由 flova MCP 自行处理、不设限；需要关闭吗？（不能用于生成户型/实景/景观/周边）", "assets:import"),
     "photos.exclude": ("有没有要排除的实勘照片（有人像、门牌、平台水印、杂乱的）？", "listing:fetch"),
     "platform": ("发布平台：抖音、视频号，还是都发？", "script"),
 }
+
+
+def normalize_flova(brief: dict) -> dict:
+    """flova is default-on; credits are handled by the flova MCP and are NOT a limit.
+
+    Old briefs may still carry flova.credit_budget: it is ignored (dropped). An explicit allowed=false is kept.
+    """
+    fl = brief.setdefault("flova", {})
+    fl.pop("credit_budget", None)
+    fl.setdefault("allowed", True)
+    return brief
 
 
 def detect_category(s: str) -> str | None:
@@ -112,7 +123,7 @@ def parse_sentence(sentence: str) -> dict:
             "pick": listing_id,
         },
         "voice": {"mode": voice, "edge_voice": "zh-CN-YunxiNeural", "rate": "+15%"},
-        "flova": {"allowed": False, "credit_budget": 0},
+        "flova": {"allowed": True},
         "photos": {"exclude": []},
         "platform": platforms,
         "map": {"query": None, "city": city, "source": "amap"},

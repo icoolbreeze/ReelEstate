@@ -102,10 +102,10 @@ npm run make -- "<一句话>" [--style qiuzhi|mediastorm] [--ratio 4x3] [--voice
 4. **配音**：AI（edge 草稿 / qwen）还是本人录音（`voice.mode=`；自录放 `audio/seg_<段id>.wav`）；AI 声音需声音本人书面授权放 `consent/`
 5. **业主委托/授权书**是否已放 `consent/`（`confirm.consent.owner`）
 6. **必须公示信息**：二手房核验码、租赁房源核验/登记备案编号（按当地要求）、价格有效期、中介全称、出镜人是否认证本人（`confirm.disclosures`）
-7. **是否允许 flova** 生成装饰/转场片段 + 积分预算（`flova.allowed=true` `flova.credit_budget=50`）
+7. **flova 默认开启**（`flova.allowed=true`，装饰/转场片段 + 地图底图重绘）；积分由 flova MCP 自行处理，**不是限制**；只有想关掉才写 `flova.allowed=false`
 8. **要排除的照片**（有人像、门牌、水印、杂乱）（`confirm.photos.exclude`）
 9. **发布平台**：抖音 / 视频号（`platform=douyin,channels`）
-10. 可选：地图查询地点（`map.query=小区名` `map.city=杭州`）
+10. 地图是**必选项**（见 §3E）；可指定查询地点（`map.query=小区名` `map.city=杭州`）和通勤目的地（`map.commute_to=西湖文化广场`，可选）
 
 不要替用户回答这些问题；`--mock` 只用于演示/测试，产物带“示例数据”角标。
 
@@ -136,9 +136,22 @@ npm run make -- "<一句话>" [--style qiuzhi|mediastorm] [--ratio 4x3] [--voice
 ## 3C. flova（图片/视频生成 MCP）
 
 - 目前只在 ZCode 注册（`~/.zcode/cli/config.json`，server `flova-image`，`node C:/Users/shipi/.flova-mcp/server.js`）。**Agent 不得修改任何客户端配置**；用户想在 Codex / Claude Code / OpenCode 用，需要自己注册同一 server。
-- **只能**生成装饰/转场素材（光效、纹理、抽象转场）。**绝不**生成户型图、室内实景、景观、小区/周边等事实性房源画面。
-- 不去水印；用 `original:false` 或付费套餐无水印输出；不写多账号/邀请刷积分脚本；遵守用户给的积分预算。
+- **只能**生成装饰/转场素材（光效、纹理、抽象转场）。**绝不**生成户型图、室内实景、景观、小区/周边等事实性房源画面（唯一例外：§3E 的地图底图重绘，基于高德静态图，必须标“示意图 / AI 生成底图 / © 高德地图”）。
+- 不去水印；只请求生成与无水印原图（profile `kid4`、`original:true`）；不写多账号/邀请刷积分脚本，不使用邀请/刷积分功能。积分由 flova MCP 自行处理，**不是限制**（不写“够做 N 条”）；生成失败（含积分原因）如实告诉用户，不绕过。
 - 生成后放进 `projects/<cat>/<id>/assets/flova/`，再跑 `npm run assets:import -- <dir>`，并在 `assets/manifest.json` 补齐：`source:"flova"`、`model`、`prompt`、`watermarked`、`license`、`ai:true`、`usage:"decorative"|"transition"`。check 对缺字段或 `watermarked:true` 直接失败；画面自动加“AI生成”角标，发布时勾选 AI 标注。
+
+## 3E. 地图是必选项 + flova 地图底图重绘（Agent 执行）
+
+- 房源信息几乎都和位置相关：**地图是每条视频的固定部分**，不可选、不可省。`shots.json` 的地图镜头带 `map_role`：`overview`（小区在城市/片区的位置）、`commute`（`map/route.json` 的高德路线距离/耗时）、`amenities`（`map/pois.json` 的 POI 距离）；有数据的角色都至少要有一个镜头。check：正式片缺地图镜头 = 失败，`--mock` = 提醒。
+- 数字只能用高德返回值（POI 直线距离由高德坐标计算，路线来自高德路径规划）。画面只写“约 N 米 · …距离（来源）”，不写“X 分钟到”（banned_words 会拦；耗时保存在 `route.json` / 镜头 `route_ref`，仅供参考）。
+- 底图是 AI 生成或示意图时，署名必须是 `示意图 / AI 生成底图 / © 高德地图`（示意占位为 `示意图 / 示意底图（非真实地图）/ © 高德地图`），由 map:fetch 写入 `map/geo.json.attribution`，check 会核对。
+- flova 默认开启，积分**不是限制**：brief 里没有 `credit_budget`（旧 brief 里有也会被忽略）。生成失败（包括积分原因）→ 把错误原文告诉用户，不绕过；不使用邀请/多账号/刷积分。管线只请求生成 + 无水印原图（profile `kid4`、`original:true`）。
+- flova 只在用户 PC 的 ZCode 里，仓库 Python 调不了，所以重绘是 **Agent 步骤**：
+  1. 跑 `npm run make -- ...`（或 `npm run map:fetch -- <项目>`）到 map:fetch：写 `map/flova_request.json`（prompt、source_image=`map/static.png`、output_image=`map/base_ai.png`、params），无 `map/base_ai.png` 时退出码 3 并打印说明。
+  2. 调 flova 图像生成：prompt + 参考图 = `source_image`，profile `kid4`，`original:true`。
+  3. 把无水印原图存成 `<项目>/map/base_ai.png`。
+  4. 原命令重跑：map:fetch 发现 `base_ai.png` → 转成 `map/satellite_4x3.jpg`（原高德卫星图留在 `map/amap_satellite_4x3.jpg`），署名换成 AI 版；`assets:import` 登记为 AI（decorative）。已有 manifest 时加 `--force` 重登记。
+  - `--mock`、`flova.allowed=false` 或没取到高德数据时不走这一步：用带标注的示意底图（或高德原图）。
 
 ## 4. 固定命令（Agent 只用这些入口，不要自造等价命令）
 

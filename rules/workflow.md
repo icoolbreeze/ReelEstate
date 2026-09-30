@@ -11,7 +11,8 @@ npm run make -- --project projects/rental/<id> --answer listing.pick=c03 --answe
 阶段：parse → listing:fetch → listing:wall → map:fetch → assets:import → script → tts → check → render。
 每个阶段幂等、可单独重跑（`npm run map:fetch -- projects/rental/<id> --force`）。
 script 阶段的兜底稿只是骨架：**Agent 必须按 `rules/style/<preset>.md` 重写口播与 `shots.json`**，并保证与近期视频不同。
-详细说明见 `docs/one-sentence-workflow.md` 与 AGENTS.md §3A–3C。下面是手工流程（仍然有效）。
+**地图是每条视频的必选镜头**（overview / commute / amenities）；flova 默认开启、积分不设限，地图底图重绘由 Agent 用 flova 完成（`map:fetch` 写 `map/flova_request.json`，无 `map/base_ai.png` 时退出码 3）——见 AGENTS.md §3E。
+详细说明见 `docs/one-sentence-workflow.md` 与 AGENTS.md §3A–3E。下面是手工流程（仍然有效）。
 
 
 ```

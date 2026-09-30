@@ -431,6 +431,71 @@ def check_map(p: dict, r: Report, project_dir: Path) -> None:
         r.warn(sec, "缺少 map/satellite_4x3.jpg")
 
 
+MAP_ROLES = {"overview": "小区所在位置", "commute": "通勤路线（map/route.json）", "amenities": "周边配套（map/pois.json）"}
+
+
+def _is_mock_project(p: dict, project_dir: Path) -> bool:
+    if p.get("is_example") is True:
+        return True
+    bp = project_dir / "brief.json"
+    if bp.exists():
+        try:
+            return (load_json(bp).get("listing") or {}).get("source") == "mock"
+        except Exception:
+            return False
+    return False
+
+
+def check_map_shots(p: dict, r: Report, project_dir: Path) -> None:
+    """The map is mandatory: >=1 map/location shot per role whose data exists. Non-mock: FAIL; mock: WARN."""
+    sec = "地图镜头"
+    mock = _is_mock_project(p, project_dir)
+    bad = r.warn if mock else r.fail
+    shots_p = project_dir / "shots.json"
+    if not shots_p.exists():
+        if (project_dir / "brief.json").exists():
+            bad(sec, "缺少 shots.json，无法确认地图镜头（地图是每条视频的必选部分）")
+        return
+    shots = load_json(shots_p).get("shots") or []
+    map_shots = [s for s in shots if s.get("type") == "map" or s.get("map_role")]
+    map_dir = project_dir / "map"
+    geo = load_json(map_dir / "geo.json") if (map_dir / "geo.json").exists() else {}
+    if not map_shots:
+        bad(sec, "视频里没有地图/位置镜头：地图是每条视频的必选部分（overview 小区位置 / commute 通勤 / amenities 周边）")
+    else:
+        r.ok(sec, f"地图/位置镜头 {len(map_shots)} 个")
+        route_p, pois_p = map_dir / "route.json", map_dir / "pois.json"
+        avail = {}
+        if geo.get("lng") is not None and geo.get("lat") is not None:
+            avail["overview"] = []
+        routes = [x for x in (load_json(route_p).get("items") or []) if x.get("distance_m")] if route_p.exists() else []
+        if routes:
+            avail["commute"] = routes
+        pois = [x for x in (load_json(pois_p).get("items") or []) if x.get("distance_m")] if pois_p.exists() else []
+        if pois:
+            avail["amenities"] = pois
+        have = {s.get("map_role") or "overview" for s in map_shots}
+        for role in avail:
+            if role not in have:
+                bad(sec, f"缺少 {role} 地图镜头：{MAP_ROLES[role]}有数据，但没有对应的 map_role={role} 镜头")
+        if not mock:
+            for s in map_shots:
+                role = s.get("map_role") or "overview"
+                if role not in ("commute", "amenities"):
+                    continue
+                ok_m = {int(round(float(x["distance_m"]))) for x in avail.get(role, [])}
+                for m in re.finditer(r"约\s*(\d+)\s*米", (s.get("location") or {}).get("sub") or ""):
+                    if int(m.group(1)) not in ok_m:
+                        r.fail(sec, f"镜头 {s.get('id')}（{role}）的“约 {m.group(1)} 米”不是高德返回的数据（只允许用 map/route.json / pois.json 里的数字）")
+    attr = geo.get("attribution") or ""
+    if geo.get("base") == "ai_repaint" and not ("示意图" in attr and "AI 生成底图" in attr and "高德" in attr):
+        bad(sec, "底图是 AI 重绘：署名必须是“示意图 / AI 生成底图 / © 高德地图”")
+    elif geo and geo.get("live_status") != "ok" and "示意图" not in attr:
+        bad(sec, "底图是示意图：署名必须含“示意图 / 示意底图 / © 高德地图”")
+    if (geo.get("repaint") or {}).get("status") == "pending":
+        bad(sec, "flova 地图底图重绘未完成（map/flova_request.json 待办）：调 flova 保存 map/base_ai.png 后重跑 map:fetch")
+
+
 def check_style(p: dict, r: Report) -> None:
     sec = "风格"
     style = p.get("style")
@@ -467,6 +532,7 @@ def run(project_dir: Path) -> Report:
     check_media(p, r, project_dir)
     check_assets(p, r, project_dir)
     check_map(p, r, project_dir)
+    check_map_shots(p, r, project_dir)
     publish_todos(p, r, project_dir)
     return r
 

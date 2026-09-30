@@ -10,7 +10,9 @@ Stages (idempotent; skip if outputs exist unless --force):
   0 parse            → brief.json
   1 listing:fetch    → listing.json + raw/listing/*
   2 listing:wall     → wall.json + raw/wall/*
-  3 map:fetch        → map/geo.json + satellite_4x3.jpg + static.png + pois.json
+  3 map:fetch        → map/geo.json + satellite_4x3.jpg + static.png + pois.json + route.json
+                       (mandatory; flova repaint is agent-performed: writes map/flova_request.json and exits 3
+                        until map/base_ai.png exists; --mock / flova.allowed=false use the labelled placeholder)
   4 assets:import    → assets/manifest.json (+ seed warehouse stock)
   4b effects         → effects.json (curated seeded effect picks; --reseed to redraw)
   5 script           → project.json + shots.json  (agent should rewrite; fallback provided)
@@ -177,6 +179,7 @@ def main(argv=None) -> int:
     if args.voice:
         brief.setdefault("voice", {})["mode"] = args.voice
     _apply_answers(brief, args.answer)
+    stage_brief.normalize_flova(brief)  # flova default-on; credit_budget (old briefs / --answer) is ignored
 
     # Defaults for a headless sample run: if --mock, pre-confirm the manual questions.
     if args.mock:
