@@ -1,0 +1,150 @@
+{
+ "id": "ep07-xihu",
+ "channel": "@贝壳-TV",
+ "episodeTag": "EP.07",
+ "format": {
+  "width": 1440,
+  "height": 1080,
+  "fps": 30
+ },
+ "sampleData": true,
+ "sampleTag": "示例数据",
+ "listing": {
+  "name": "西湖文化广场",
+  "community": "西湖文化广场",
+  "layout": "2室1厅",
+  "area": 89,
+  "rent": 4800,
+  "lnglat": [
+   120.167637,
+   30.276067
+  ],
+  "coord": "gcj02",
+  "note": "全部房源字段为示例数据，接入云端真实档案后替换"
+ },
+ "plane": {
+  "center": [
+   120.1665,
+   30.2745
+  ],
+  "zoom": 15,
+  "k": 2.8125,
+  "w": 1440,
+  "h": 1080
+ },
+ "mapBase": {
+  "file": "map/base_flovaSat3Db.png",
+  "ext": [
+   -640,
+   -880,
+   2080,
+   1960
+  ],
+  "credit": "示意图　房源照片AI示意　底图据高德数据绘制·AI润色（参考卫星影像）　POI、距离 © 高德地图",
+  "builtBy": "multiplane-opener/flova_sat3d/build_base_v6b.py (see pipeline/README.md: base-map build)"
+ },
+ "poiQueries": [
+  {
+   "id": "metro",
+   "kind": "metro",
+   "query": "西湖文化广场站",
+   "pick": "西湖文化广场(地铁站)",
+   "label": "西湖文化广场站",
+   "sub": "地铁1/3/19号线",
+   "modes": [
+    "walking"
+   ]
+  },
+  {
+   "id": "school1",
+   "kind": "school",
+   "query": "西湖文化广场 小学",
+   "pick": "杭州长江实验小学(秋水弄)",
+   "label": "杭州长江实验小学",
+   "sub": "秋水弄校区",
+   "modes": [
+    "walking"
+   ]
+  },
+  {
+   "id": "school2",
+   "kind": "school",
+   "query": "西湖文化广场 中学",
+   "pick": "杭州市朝晖中学",
+   "label": "杭州市朝晖中学",
+   "sub": "",
+   "modes": [
+    "walking"
+   ]
+  },
+  {
+   "id": "mall",
+   "kind": "mall",
+   "query": "西湖文化广场 商场",
+   "pick": "环球中心(银泰百货)",
+   "label": "银泰百货",
+   "sub": "西湖文化广场店",
+   "modes": [
+    "walking"
+   ]
+  },
+  {
+   "id": "market",
+   "kind": "market",
+   "query": "西湖文化广场 超市",
+   "pick": "世纪联华超市(西湖文化广场店)",
+   "label": "世纪联华超市",
+   "sub": "西湖文化广场店",
+   "modes": [
+    "walking"
+   ]
+  },
+  {
+   "id": "hospital",
+   "kind": "hospital",
+   "query": "西湖文化广场 医院",
+   "pick": "浙江省人民医院(朝晖院区)",
+   "label": "浙江省人民医院",
+   "sub": "朝晖院区",
+   "modes": [
+    "walking",
+    "driving"
+   ]
+  },
+  {
+   "id": "hospital2",
+   "kind": "hospital",
+   "query": "西湖文化广场 医院",
+   "pick": "杭州市儿童医院",
+   "label": "杭州市儿童医院",
+   "sub": "",
+   "modes": [
+    "walking",
+    "driving"
+   ]
+  },
+  {
+   "id": "park",
+   "kind": "park",
+   "query": "中山北路 公园",
+   "pick": "环北公园",
+   "label": "环北公园",
+   "sub": "运河边",
+   "modes": [
+    "walking"
+   ]
+  },
+  {
+   "id": "plaza",
+   "kind": "park",
+   "query": "西湖文化广场 公园",
+   "pick": "西湖文化广场",
+   "label": "西湖文化广场",
+   "sub": "城市广场",
+   "modes": [
+    "walking"
+   ]
+  }
+ ],
+ "onScreenNotes": false
+}

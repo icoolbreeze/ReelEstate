@@ -1,5 +1,6 @@
 import React from "react";
 import { Composition, type CalculateMetadataFunction } from "remotion";
+import { HookMatteV1 } from "./compositions/hook/HookMatteV1";
 import { NewHomeVideo } from "./compositions/new-home/NewHomeVideo";
 import { RentalVideo } from "./compositions/rental/RentalVideo";
 import { ResaleVideo } from "./compositions/resale/ResaleVideo";
@@ -29,6 +30,24 @@ const calculateMetadata: CalculateMetadataFunction<Project> = ({ props }) => {
 
 export const RemotionRoot: React.FC = () => (
   <>
+    <Composition
+      id="HookMatteV1"
+      component={HookMatteV1}
+      width={1440}
+      height={1080}
+      fps={FPS}
+      durationInFrames={150}
+      defaultProps={{
+        background: "hook_matte/clip1.mp4",
+        matte: "hook_matte/clip1_alpha.webm",
+        rooms: [
+          "hook_matte/rooms/living.jpg",
+          "hook_matte/rooms/bedroom.jpg",
+          "hook_matte/rooms/kitchen.jpg",
+        ],
+        brandLogos: [],
+      }}
+    />
     {CATEGORIES.flatMap((c) =>
       (Object.keys(RATIOS) as Ratio[]).map((ratio) => (
         <Composition

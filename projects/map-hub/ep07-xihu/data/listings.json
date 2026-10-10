@@ -1,0 +1,383 @@
+{
+ "_comment": "示例数据。云端归档房源按同样字段导出即可替换：community 小区, district 区, layout 户型, area 面积㎡, rent 租金元/月, listed 上架时间, tags 最多3个短标签, photo 为 public/photos_g/ 下文件名（先放 public/photos/ 再跑 scripts/grade.py 统一调色+裁 16:10）, photoKind ai|real|stock, verdict 扫描标注。mid = 中景滑动卡组（按顺序从左到右）；archive = 背景整页（每区一行）。chosenId 必须在 mid 里。 archive[].groups = 每行两组的小标题和套数（每组4张卡）。",
+ "sampleTag": "示例数据",
+ "filters": [
+  "2室",
+  "租金≤5000元",
+  "近地铁"
+ ],
+ "candidates": 128,
+ "chosenId": "xhwhgc-01",
+ "mid": [
+  {
+   "id": "m1",
+   "community": "朝晖六区",
+   "district": "下城",
+   "layout": "2室1厅",
+   "area": 72,
+   "rent": 3900,
+   "listed": "2天前",
+   "tags": [
+    "南北通透",
+    "可月付"
+   ],
+   "photo": "p_living_m2.jpg",
+   "photoKind": "ai",
+   "verdict": "距地铁远"
+  },
+  {
+   "id": "m2",
+   "community": "文三新村",
+   "district": "西湖",
+   "layout": "1室1厅",
+   "area": 48,
+   "rent": 3600,
+   "listed": "5天前",
+   "tags": [
+    "精装",
+    "拎包入住"
+   ],
+   "photo": "p_kitchen_s.jpg",
+   "photoKind": "stock",
+   "verdict": "户型不符"
+  },
+  {
+   "id": "m3",
+   "community": "嘉绿苑",
+   "district": "西湖",
+   "layout": "2室1厅",
+   "area": 76,
+   "rent": 4300,
+   "listed": "1天前",
+   "tags": [
+    "近公园",
+    "有电梯"
+   ],
+   "photo": "p_bed_s.jpg",
+   "photoKind": "stock",
+   "verdict": "已出租"
+  },
+  {
+   "id": "m4",
+   "community": "百合公寓",
+   "district": "拱墅",
+   "layout": "2室2厅",
+   "area": 102,
+   "rent": 6800,
+   "listed": "3天前",
+   "tags": [
+    "高楼层",
+    "精装"
+   ],
+   "photo": "p_living_s2.jpg",
+   "photoKind": "stock",
+   "verdict": "租金超出"
+  },
+  {
+   "id": "m5",
+   "community": "翠苑一区",
+   "district": "西湖",
+   "layout": "3室1厅",
+   "area": 98,
+   "rent": 5600,
+   "listed": "4天前",
+   "tags": [
+    "学区",
+    "南向"
+   ],
+   "photo": "p_living_m3.jpg",
+   "photoKind": "ai",
+   "verdict": "租金超出"
+  },
+  {
+   "id": "m6",
+   "community": "西溪诚园",
+   "district": "西湖",
+   "layout": "2室1厅",
+   "area": 88,
+   "rent": 5200,
+   "listed": "2天前",
+   "tags": [
+    "新小区",
+    "有车位"
+   ],
+   "photo": "p_bed_a.jpg",
+   "photoKind": "ai",
+   "verdict": "租金超出"
+  },
+  {
+   "id": "xhwhgc-01",
+   "community": "西湖文化广场",
+   "district": "拱墅",
+   "layout": "2室1厅",
+   "area": 89,
+   "rent": 4800,
+   "listed": "今天",
+   "tags": [
+    "近地铁",
+    "南向",
+    "精装"
+   ],
+   "photo": "p_living_a.jpg",
+   "photoKind": "ai",
+   "verdict": "条件全部满足"
+  },
+  {
+   "id": "m8",
+   "community": "武林府",
+   "district": "拱墅",
+   "layout": "3室2厅",
+   "area": 128,
+   "rent": 9500,
+   "listed": "6天前",
+   "tags": [
+    "江景",
+    "高楼层"
+   ],
+   "photo": "p_kitchen_s2.jpg",
+   "photoKind": "stock",
+   "verdict": "户型不符"
+  },
+  {
+   "id": "m9",
+   "community": "东新园",
+   "district": "拱墅",
+   "layout": "2室1厅",
+   "area": 81,
+   "rent": 4600,
+   "listed": "3天前",
+   "tags": [
+    "可短租",
+    "有电梯"
+   ],
+   "photo": "p_bed_s2.jpg",
+   "photoKind": "stock",
+   "verdict": "距地铁远"
+  }
+ ],
+ "archive": [
+  {
+   "district": "西湖区",
+   "count": 46,
+   "items": [
+    [
+     "黄龙雅苑",
+     "2室1厅",
+     86,
+     5400,
+     "p_bed_a2.jpg"
+    ],
+    [
+     "文鼎苑",
+     "3室2厅",
+     118,
+     7800,
+     "p_living_s.jpg"
+    ],
+    [
+     "学院路小区",
+     "1室1厅",
+     45,
+     3200,
+     "p_kitchen_s2.jpg"
+    ],
+    [
+     "古荡新村",
+     "2室1厅",
+     68,
+     3900,
+     "p_living_m3.jpg"
+    ],
+    [
+     "求是村",
+     "2室1厅",
+     62,
+     4100,
+     "p_bed_s.jpg"
+    ],
+    [
+     "耀江文鼎苑",
+     "3室1厅",
+     104,
+     6900,
+     "p_living_a2.jpg"
+    ],
+    [
+     "翠苑二区",
+     "2室1厅",
+     70,
+     3800,
+     "p_bed_m1.jpg"
+    ],
+    [
+     "保俶北路",
+     "1室1厅",
+     52,
+     3500,
+     "p_kitchen_s.jpg"
+    ]
+   ],
+   "groups": [
+    {
+     "name": "文教区",
+     "count": 19
+    },
+    {
+     "name": "黄龙·古荡",
+     "count": 27
+    }
+   ]
+  },
+  {
+   "district": "拱墅区",
+   "count": 51,
+   "items": [
+    [
+     "朝晖五区",
+     "2室1厅",
+     66,
+     3700,
+     "p_living_m2.jpg"
+    ],
+    [
+     "中山花园",
+     "3室2厅",
+     132,
+     9800,
+     "p_living_s2.jpg"
+    ],
+    [
+     "和睦新村",
+     "2室1厅",
+     64,
+     3600,
+     "p_bed_s2.jpg"
+    ],
+    [
+     "湖墅嘉园",
+     "2室2厅",
+     96,
+     6200,
+     "p_living_a2.jpg"
+    ],
+    [
+     "大关小区",
+     "1室1厅",
+     42,
+     2900,
+     "p_kitchen_s.jpg"
+    ],
+    [
+     "运河宸园",
+     "3室2厅",
+     140,
+     11500,
+     "p_ext_s2.jpg"
+    ],
+    [
+     "米市巷",
+     "2室1厅",
+     74,
+     4400,
+     "p_bed_a2.jpg"
+    ],
+    [
+     "德胜新村",
+     "2室1厅",
+     69,
+     3800,
+     "p_living_m3.jpg"
+    ]
+   ],
+   "groups": [
+    {
+     "name": "朝晖·和睦",
+     "count": 24
+    },
+    {
+     "name": "湖墅·运河",
+     "count": 27
+    }
+   ]
+  },
+  {
+   "district": "上城区",
+   "count": 31,
+   "items": [
+    [
+     "钱江新城公寓",
+     "2室1厅",
+     90,
+     7200,
+     "p_ext_s.jpg"
+    ],
+    [
+     "清波街",
+     "1室1厅",
+     50,
+     4200,
+     "p_bed_s.jpg"
+    ],
+    [
+     "近江家园",
+     "3室1厅",
+     112,
+     6600,
+     "p_living_s.jpg"
+    ],
+    [
+     "望江家园",
+     "2室2厅",
+     98,
+     6000,
+     "p_bed_m1.jpg"
+    ],
+    [
+     "采荷人家",
+     "2室1厅",
+     72,
+     4000,
+     "p_kitchen_s2.jpg"
+    ],
+    [
+     "城站公寓",
+     "1室1厅",
+     46,
+     3400,
+     "p_living_m2.jpg"
+    ],
+    [
+     "江锦公寓",
+     "2室1厅",
+     88,
+     6100,
+     "p_bed_a.jpg"
+    ],
+    [
+     "凤凰城",
+     "3室2厅",
+     136,
+     9200,
+     "p_living_a2.jpg"
+    ]
+   ],
+   "groups": [
+    {
+     "name": "钱江新城",
+     "count": 13
+    },
+    {
+     "name": "湖滨·望江",
+     "count": 18
+    }
+   ]
+  }
+ ],
+ "fgCard": [
+  "湖滨花园",
+  "2室1厅",
+  84,
+  5800,
+  "p_living_s.jpg"
+ ]
+}

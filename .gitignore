@@ -68,3 +68,42 @@ desktop.ini
 
 # ---- 动效抽取历史（本机，避开最近 5 条视频用过的效果）----
 /projects/.effects-history.json
+
+# ---- CosyVoice (voice clone; repo + venv + models, local only) ----
+/vendor/cosyvoice/
+/vendor/f5tts/
+/vendor/rvm/
+/vendor/matanyone2/
+/vendor/indextts2/
+
+# ---- map-hub 口播 template + episodes (docs/RUNBOOK-map-hub-koubo.md) ----
+/templates/map-hub/remotion/public
+/templates/map-hub/remotion/src/episode
+/templates/map-hub/remotion/.current-episode
+/templates/map-hub/shared/public/fonts/
+!/projects/map-hub/
+/projects/map-hub/*
+!/projects/map-hub/ep07-xihu/
+/projects/map-hub/ep07-xihu/*
+!/projects/map-hub/ep07-xihu/README.md
+!/projects/map-hub/ep07-xihu/episode.json
+!/projects/map-hub/ep07-xihu/pois.json
+!/projects/map-hub/ep07-xihu/pois.md
+!/projects/map-hub/ep07-xihu/shots.json
+!/projects/map-hub/ep07-xihu/script_v*.json
+!/projects/map-hub/ep07-xihu/script_v*.md
+!/projects/map-hub/ep07-xihu/heygen_segments.md
+!/projects/map-hub/ep07-xihu/data/
+!/projects/map-hub/ep07-xihu/muse_prompts/
+!/projects/map-hub/ep07-xihu/annotations/
+/projects/map-hub/ep07-xihu/annotations/*.mp4
+/projects/map-hub/ep07-xihu/annotations/**/*.jpg
+
+# ---- shared presenter profiles (yaml tracked, media local) ----
+/assets/presenter/*/media/
+
+# ---- local MCP/generation artifacts ----
+/.playwright-mcp/
+/.wav
+/flova-images/
+*.bak

@@ -1,0 +1,133 @@
+{
+ "_doc": "Map-hub layout for this episode. Plane coords = episode plane (see episode.json plane). cams: fx,fy = plane focus, s = scale, tilt deg, P = perspective px. marks: rooms are screen-space cards fanned around the listing pin (offset px at s=2); env/pois are plane-anchored pins.",
+ "cams": {
+  "wide": {
+   "fx": 760,
+   "fy": 230,
+   "s": 1.0,
+   "tilt": 30,
+   "P": 2200
+  },
+  "community": {
+   "fx": 800,
+   "fy": 410,
+   "s": 2.1,
+   "tilt": 40,
+   "P": 1500
+  },
+  "rooms": {
+   "fx": 790,
+   "fy": 380,
+   "s": 1.9,
+   "tilt": 38,
+   "P": 1500
+  },
+  "env": {
+   "fx": 770,
+   "fy": 440,
+   "s": 2.4,
+   "tilt": 42,
+   "P": 1500
+  },
+  "metro": {
+   "fx": 735,
+   "fy": 300,
+   "s": 1.55,
+   "tilt": 38,
+   "P": 1700
+  },
+  "schools": {
+   "fx": 740,
+   "fy": 120,
+   "s": 1.1,
+   "tilt": 30,
+   "P": 2200
+  },
+  "market": {
+   "fx": 600,
+   "fy": 360,
+   "s": 1.6,
+   "tilt": 38,
+   "P": 1700
+  },
+  "hospital": {
+   "fx": 880,
+   "fy": 140,
+   "s": 1.1,
+   "tilt": 30,
+   "P": 2200
+  },
+  "park": {
+   "fx": 700,
+   "fy": 500,
+   "s": 1.7,
+   "tilt": 38,
+   "P": 1700
+  }
+ },
+ "rooms": [
+  {
+   "id": "room_living",
+   "label": "客厅",
+   "photo": "placeholder/I1.jpg",
+   "off": [
+    -330,
+    -150
+   ],
+   "clip": "LR1",
+   "stillT": 1.2
+  },
+  {
+   "id": "room_bed",
+   "label": "卧室",
+   "photo": "placeholder/I2.jpg",
+   "off": [
+    -150,
+    -250
+   ],
+   "clip": "BR1",
+   "stillT": 1.0
+  },
+  {
+   "id": "room_kitchen",
+   "label": "厨卫",
+   "photo": "placeholder/kitchen.jpg",
+   "off": [
+    50,
+    -250
+   ],
+   "clip": "KB1",
+   "stillT": 1.4
+  }
+ ],
+ "env": {
+  "id": "env",
+  "label": "小区环境",
+  "sub": "绿化 · 楼间距 · 出入口（示意）",
+  "dxy": [
+   -58,
+   52
+  ]
+ },
+ "enterCam": {
+  "room_living": "rooms",
+  "room_bed": "rooms",
+  "room_kitchen": "rooms",
+  "env": "env",
+  "market": "market",
+  "park": "park"
+ },
+ "presenterPlaceholders": {
+  "P1": "placeholder/H1.mp4",
+  "P2": "placeholder/H2.mp4",
+  "P3": "placeholder/H_side.mp4",
+  "P4": "placeholder/H3.mp4",
+  "P5": "placeholder/H1.mp4"
+ },
+ "clipTags": {
+  "NB1": "示意画面 · 非门店实拍",
+  "NB3": "示意画面 · 非商场实拍",
+  "NB2": "示意画面 · 非环北公园实景",
+  "MET1": "示意画面 · 非车站实拍"
+ }
+}

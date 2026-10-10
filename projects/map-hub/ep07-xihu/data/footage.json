@@ -1,0 +1,275 @@
+{
+ "LR1": {
+  "kind": "video",
+  "src": "footage/LR1.mp4",
+  "status": "muse",
+  "w": 1088,
+  "h": 816,
+  "fps": 24.0,
+  "dur": 10.0,
+  "purpose": "样板间·客厅全景：落地窗采光、沙发、茶几",
+  "still": "rooms/LR1.jpg"
+ },
+ "LR2": {
+  "kind": "video",
+  "src": "footage/LR2.mp4",
+  "status": "muse",
+  "w": 1088,
+  "h": 816,
+  "fps": 24.0,
+  "dur": 10.0,
+  "purpose": "样板间·客厅收纳：整面电视柜、人字拼地板"
+ },
+ "BR1": {
+  "kind": "video",
+  "src": "footage/BR1.mp4",
+  "status": "muse",
+  "w": 1088,
+  "h": 816,
+  "fps": 24.0,
+  "dur": 10.0,
+  "purpose": "样板间·主卧：1.8米床、窗边绿植位、纱帘",
+  "still": "rooms/BR1.jpg"
+ },
+ "BR2": {
+  "kind": "video",
+  "src": "footage/BR2.mp4",
+  "status": "muse",
+  "w": 1088,
+  "h": 816,
+  "fps": 24.0,
+  "dur": 10.0,
+  "purpose": "样板间·次卧/书房：靠窗书桌"
+ },
+ "KB1": {
+  "kind": "video",
+  "src": "footage/KB1.mp4",
+  "status": "muse",
+  "w": 1088,
+  "h": 816,
+  "fps": 24.0,
+  "dur": 10.0,
+  "purpose": "样板间·厨房：一字型橱柜、灶台、油烟机、冰箱位",
+  "still": "rooms/KB1.jpg"
+ },
+ "KB2": {
+  "kind": "video",
+  "src": "footage/KB2.mp4",
+  "status": "muse",
+  "w": 1088,
+  "h": 816,
+  "fps": 24.0,
+  "dur": 10.0,
+  "purpose": "样板间·卫生间：干湿分离、玻璃淋浴隔断"
+ },
+ "ENV1": {
+  "kind": "video",
+  "src": "footage/ENV1.mp4",
+  "status": "muse",
+  "w": 1088,
+  "h": 816,
+  "fps": 24.0,
+  "dur": 10.0,
+  "purpose": "小区环境·中心绿地（AI示意）"
+ },
+ "ENV2": {
+  "kind": "video",
+  "src": "footage/ENV2.mp4",
+  "status": "muse",
+  "w": 1088,
+  "h": 816,
+  "fps": 24.0,
+  "dur": 10.0,
+  "purpose": "小区环境·楼间距（AI示意）"
+ },
+ "ENV3": {
+  "kind": "video",
+  "src": "footage/ENV3.mp4",
+  "status": "muse",
+  "w": 1088,
+  "h": 816,
+  "fps": 24.0,
+  "dur": 10.0,
+  "purpose": "小区环境·出入口与门禁（AI示意）"
+ },
+ "NB1": {
+  "kind": "video",
+  "src": "footage/NB1.mp4",
+  "status": "muse",
+  "w": 1088,
+  "h": 816,
+  "fps": 24.0,
+  "dur": 10.0,
+  "purpose": "周边配套·超市生鲜区"
+ },
+ "NB3": {
+  "kind": "video",
+  "src": "footage/NB3.mp4",
+  "status": "muse",
+  "w": 1088,
+  "h": 816,
+  "fps": 24.0,
+  "dur": 10.0,
+  "purpose": "周边配套·商场中庭"
+ },
+ "NB2": {
+  "kind": "video",
+  "src": "footage/NB2.mp4",
+  "status": "muse",
+  "w": 1088,
+  "h": 816,
+  "fps": 24.0,
+  "dur": 10.0,
+  "purpose": "周边配套·运河边公园（环北公园一带，示意）"
+ },
+ "MET1": {
+  "kind": "video",
+  "src": "footage/MET1.mp4",
+  "status": "muse",
+  "w": 1088,
+  "h": 816,
+  "fps": 24.0,
+  "dur": 10.0,
+  "purpose": "周边配套·地铁站出入口（备用，2秒插入）"
+ },
+ "P1": {
+  "kind": "video",
+  "src": "footage/P1.mp4",
+  "status": "muse",
+  "w": 1088,
+  "h": 816,
+  "fps": 24.0,
+  "dur": 10.0,
+  "purpose": "主持人·开场介绍房源（正面）"
+ },
+ "P2": {
+  "kind": "video",
+  "src": "footage/P2.mp4",
+  "status": "muse",
+  "w": 1088,
+  "h": 816,
+  "fps": 24.0,
+  "dur": 10.0,
+  "purpose": "主持人·地图讲解小窗（看向左侧屏幕）"
+ },
+ "P3": {
+  "kind": "video",
+  "src": "footage/P3.mp4",
+  "status": "muse",
+  "w": 1088,
+  "h": 816,
+  "fps": 24.0,
+  "dur": 10.0,
+  "purpose": "主持人·侧面机位（第二机位，转入配套）"
+ },
+ "P4": {
+  "kind": "video",
+  "src": "footage/P4.mp4",
+  "status": "muse",
+  "w": 1088,
+  "h": 816,
+  "fps": 24.0,
+  "dur": 10.0,
+  "purpose": "主持人·总结（正面）"
+ },
+ "P5": {
+  "kind": "video",
+  "src": "footage/P5.mp4",
+  "status": "muse",
+  "w": 1088,
+  "h": 816,
+  "fps": 24.0,
+  "dur": 10.0,
+  "purpose": "主持人·结尾号召（正面）"
+ },
+ "HG00": {
+  "kind": "video",
+  "src": "footage/heygen/HG00.mp4",
+  "status": "heygen",
+  "cx": 0.5,
+  "w": 1280,
+  "h": 720,
+  "fps": 30.0,
+  "dur": 8.133008
+ },
+ "HG00_alpha": {
+  "kind": "video",
+  "src": "footage/heygen/HG00_alpha.webm",
+  "status": "heygen",
+  "cx": 0.5,
+  "w": 1280,
+  "h": 720,
+  "fps": 30.0,
+  "dur": 8.133
+ },
+ "HG01": {
+  "kind": "video",
+  "src": "footage/heygen/HG01.mp4",
+  "status": "heygen",
+  "cx": 0.5,
+  "w": 1280,
+  "h": 720,
+  "fps": 30.0,
+  "dur": 4.933333
+ },
+ "HG02": {
+  "kind": "video",
+  "src": "footage/heygen/HG02.mp4",
+  "status": "heygen",
+  "cx": 0.5,
+  "w": 1280,
+  "h": 720,
+  "fps": 30.0,
+  "dur": 2.9
+ },
+ "HG04": {
+  "kind": "video",
+  "src": "footage/heygen/HG04.mp4",
+  "status": "heygen",
+  "cx": 0.5,
+  "w": 1280,
+  "h": 720,
+  "fps": 30.0,
+  "dur": 7.133333
+ },
+ "HG05": {
+  "kind": "video",
+  "src": "footage/heygen/HG05.mp4",
+  "status": "heygen",
+  "cx": 0.5,
+  "w": 1280,
+  "h": 720,
+  "fps": 30.0,
+  "dur": 6.233333
+ },
+ "HG06": {
+  "kind": "video",
+  "src": "footage/heygen/HG06.mp4",
+  "status": "heygen",
+  "cx": 0.5,
+  "w": 1280,
+  "h": 720,
+  "fps": 30.0,
+  "dur": 4.4
+ },
+ "HG08": {
+  "kind": "video",
+  "src": "footage/heygen/HG08.mp4",
+  "status": "heygen",
+  "cx": 0.5,
+  "w": 1280,
+  "h": 720,
+  "fps": 30.0,
+  "dur": 4.833333
+ },
+ "HG09": {
+  "kind": "video",
+  "src": "footage/heygen/HG09.mp4",
+  "status": "heygen",
+  "cx": 0.5,
+  "w": 1280,
+  "h": 720,
+  "fps": 30.0,
+  "dur": 3.733333
+ }
+}

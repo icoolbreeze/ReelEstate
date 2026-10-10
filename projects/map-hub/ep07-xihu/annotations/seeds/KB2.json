@@ -1,0 +1,38 @@
+{
+ "t": 1.17,
+ "targets": [
+  {
+   "id": "t0",
+   "label": "镜柜灯带",
+   "sub": "LIT MIRROR CABINET",
+   "box": [
+    0.25,
+    0.05,
+    0.22,
+    0.43
+   ]
+  },
+  {
+   "id": "t1",
+   "label": "悬挂浴室柜",
+   "sub": "FLOATING VANITY",
+   "box": [
+    0.25,
+    0.6,
+    0.29,
+    0.38
+   ]
+  },
+  {
+   "id": "t2",
+   "label": "玻璃淋浴隔断",
+   "sub": "GLASS SHOWER SCREEN",
+   "box": [
+    0.54,
+    0.06,
+    0.33,
+    0.9
+   ]
+  }
+ ]
+}

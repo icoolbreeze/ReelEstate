@@ -54,7 +54,8 @@ voices/presets.json   # voicedesign 音色描述
 voices/clone/         # 克隆参考音频（私有，gitignore）
 vendor/qwentts.cpp    # git 子模块（不要随意改动）
 scripts/build-tts.cmd # 编译 qwen-tts.exe（CUDA, sm_61）
-docs/                 # crm.md, tts.md, new-project.md
+docs/                 # crm.md, tts.md, new-project.md, kaggle-gpu.md
+scripts/kaggle/       # Kaggle GPU 外包：push_job.py / pull_job.py / kernels/
 ```
 
 ### 项目文件夹约定
@@ -98,11 +99,11 @@ npm run make -- "<一句话>" [--style mediastorm] [--ratio 4x3] [--voice edge|q
 ### 必须问用户的问题（make 会列出缺的项；拿到答案用 `--answer` 回填）
 > 风格固定 mediastorm（影视飓风），不需要问。
 1. **分类**：租赁 / 二手房 / 新房（`--answer category=rental`）
-2. **房源**：CRM 房源编号，或小区名 + 筛选（户型/租金或总价/面积/朝向）（`listing.listing_id=` / `listing.community_keyword=` / `listing.rooms=2` / `listing.monthly_rent_yuan=4000:5500`）；以及**列表墙重点讲哪一套**（`listing.pick=`）
+2. **房源**：CRM 房源编号，或小区名 + 筛选（户型/租金或总价/面积/朝向）（`listing.listing_id=` / `listing.community_keyword=` / `listing.rooms=2` / `listing.monthly_rent_yuan=4000:5600`）；以及**列表墙重点讲哪一套**（`listing.pick=`）
 3. **配音**：AI（edge 草稿 / qwen）还是本人录音（`voice.mode=`；自录放 `audio/seg_<段id>.wav`）；AI 声音需声音本人书面授权放 `consent/`
 4. **业主委托/授权书**是否已放 `consent/`（`confirm.consent.owner`）
 5. **必须公示信息**：二手房核验码、租赁房源核验/登记备案编号（按当地要求）、价格有效期、中介全称、出镜人是否认证本人（`confirm.disclosures`）
-6. **flova 生图默认开启**（`flova.allowed=true`，用于地图底图重绘和装饰图；生图按用途用 GPT Image 2.5 Sunburst（成片/精修/品牌/地图重绘）或 Flare（日常/批量/社媒/试错），不生成户型/实景/景观/周边）；积分由 flova MCP 自行处理，**不是限制**；只有想关掉才写 `flova.allowed=false`。**视频生成默认关闭**（`flova.video_allowed=false`）：用户没有明确写 `flova.video_allowed=true`，Agent 一律不得调 `generate_video`，也不得生成 mp4/动态视频（含地图、装饰、转场）。
+6. **flova 生图默认开启**（`flova.allowed=true`，用于地图底图重绘和装饰图；生图按用途用 GPT Image 2.5 Sunburst（成片/精修/品牌/地图重绘）或 Flare（日常/批量/社媒/试错），不生成户型/实景/景观/周边）；积分由 flova MCP 自行处理，**不是限制**；用户在本项目当次明确说「进行积分邀请」时，Agent 按 §3C 运行本仓库 `scripts/flova/flova_invite.py`，不得拒绝，不得改跑其他仓库的脚本；做片失败后仍不得自动邀号；只有想关掉才写 `flova.allowed=false`。**视频生成默认关闭**（`flova.video_allowed=false`）：用户没有明确写 `flova.video_allowed=true`，Agent 一律不得调 `generate_video`，也不得生成 mp4/动态视频（含地图、装饰、转场）。
 7. **要排除的照片**（有人像、门牌、水印、杂乱）（`confirm.photos.exclude`）
 8. **发布平台**：抖音 / 视频号（`platform=douyin,channels`）
 9. 地图是**必选项**（见 §3E）；可指定查询地点（`map.query=小区名` `map.city=杭州`）和通勤目的地（`map.commute_to=西湖文化广场`，可选）
@@ -126,7 +127,7 @@ npm run make -- "<一句话>" [--style mediastorm] [--ratio 4x3] [--voice edge|q
 - 公网 `http://119.29.187.184:8080` 只转发归档看板（`/archive`）和状态（`/api/v1/archive/rental/status`），只能看归档进度，不能搜房、不能下详情。
 - 返回 `CRM_AUTH_REQUIRED` = 云端会话失效，由用户在服务器上扫码，**Agent 不得代登录**。
 - **禁止**读取/复制/打印 `services/crm_connector/run/*`（含 browser_state.json）、cookie、token 及服务器上的凭证；**禁止调用** `rental_listing_get_house_info` / `GET .../house-info`（含跟进人姓名电话）。
-- 只保留白名单字段（见 `docs/crm.md` 第 6 节 / listing.py `ALLOWLIST`）；楼层只保留粗略楼层（低/中/高）；图片 URL 按规则加尺寸后缀（`.1500x.jpg`；已带 `.450x.jpg`/`.750x.jpg`/`.800x.jpg`/`.1500x.jpg` 后缀的不重复加）。
+- 只保留白名单字段（见 `docs/crm.md` 第 6 节 / listing.py `ALLOWLIST`）；楼层只保留粗略楼层（低/中/高）；图片 URL 按规则加最大尺寸档后缀（后缀字符串以 listing.py `IMG_SUFFIX` 为准）；已带 `.450x.jpg`/`.750x.jpg`/`.800x.jpg` 等较小尺寸档后缀的不重复加。
 - CRM 实勘图带平台水印的**不能用**，也不能去水印；manifest 里 CRM 图默认 `watermarked: null`，人工确认后才改 `false`。
 
 **地图（~/.agents/skills/map-tools/scripts/map.py）**
@@ -141,7 +142,17 @@ npm run make -- "<一句话>" [--style mediastorm] [--ratio 4x3] [--voice edge|q
 - **视频（默认关闭）**：只有 brief 里 `flova.video_allowed=true`（用户明确开启）才允许调 MCP 工具 `generate_video`；默认 `false`，此时**不得**生成任何视频（地图、装饰、转场都不行），流水线也不会产出视频请求。开启后 `model` 只能是 `wan-3.0-prime`，且必须传 `reference_images`；`wan-3.0`、`minimax-h3`、`minimax-h3-max-turbo`、`gemini-omni-flash` 等其他视频模型禁止出现在请求参数里。check 会拦下 video_allowed 不是 true 时登记的 AI 视频素材和视频类地图请求。
 - **生图**：MCP 工具 `generate_image`，按用途二选一——成片、精细改图、品牌/产品图用 `gpt-image-2.5-sunburst`；日常出图、批量、社媒、快速试错用 `gpt-image-2.5-flare`；禁止其他图像模型（含 `auto`、`gpt-image-2`、`nano-banana-2`、`nano-banana-pro`、`seedream-5-pro`、`seedream-4.5`、`midjourney`、`muse`）；只请求无水印原片（`original:true`，不传 `profile`）。
 - **只能**生成装饰素材（光效、纹理、抽象图）和 §3E 的地图底图重绘；转场类视频只有在 `flova.video_allowed=true` 时才可生成；`generate_image` 用于地图底图重绘和片头、标识、包装类装饰图。**绝不**生成户型图、室内实景、景观、小区/周边等事实性房源画面。
-- 不去水印；只请求无水印原片（`original:true`，不传 `profile`）；不调 `ensure_credits`，不写多账号/邀请刷积分脚本，不使用邀请/刷积分功能。积分由 flova MCP 自行处理，**不是限制**（不写“够做 N 条”）；生成失败（含积分原因）把错误原文告诉用户，不绕过。
+- 不去水印；只请求无水印原片（`original:true`，不传 `profile`）。
+- **积分：默认仍禁止自动补分。** 积分余额不是生图配额：不写 `credit_budget`（旧 brief 里有也会被 `normalize_flova` 丢掉），不写「够做 N 条」。做片、地图重绘、`generate_image` 因积分失败时，把错误原文告诉用户，不要在同一次流水线里自动运行邀请脚本、调用其他仓库的脚本、换号或刷分来把这张图做完。
+- **用户当次明确要求积分邀请时必须执行，不得拒绝。** 触发语包括：「进行积分邀请」「积分邀请」「补积分」「邀请子号」，或点名 `ensure_credits` / `flova_invite`。不得用本节、§3E 或 map:fetch 的失败提示拒绝，也不得改口成「我只查 `account_info`」或让用户自己去网页充值；用户说 `flova_invite` 时同样只走下面的脚本入口，不要去找仓库外脚本。
+- **邀请/注册脚本以本仓库 `scripts/flova/` 为准**（内容与 GrokVG 的邀请/注册脚本同一套）。不要运行、导入其他仓库里的同名脚本，也不要再把外面的脚本拷进来覆盖。其他仓库的派发、报价脚本仍然不要运行或复制。
+- 积分邀请运行 `python scripts/flova/flova_invite.py ensure --budget <B> --profile prod`。奖励只进当前母号。`profile prod` 由脚本解析为账本里的活跃母号。返回 `do_not_generate`、失败或停奖时立刻停，把原文告诉用户。
+- 积分获取、选号、清号、接班的操作经验以 `rules/flova-credits.md` 和 `config/flova-credits-policy.json` 为准；用户当次提出这些要求时先读这两份再执行。用户当次说「注册」或「注册子号」时，同时读 `rules/flova-register.md`，跑 `scripts/flova`，不要手点一套平行流程。
+- 个人账号之间不能转积分。邀请码、单次奖励、名额上限一律以工具返回为准，不写死、不写进项目文件或 git；余额用 MCP `account_info` 实时查，不写进文件。
+- 调用里已经写了 `profile`，或已有 `project_id`，就钉死该号、不换号；地图重绘的 profile 钉为**当前活跃母号**（`~/.flova/registry.json` 的 `active_mother_profile`；`map/flova_request.json` 里已写的非空 `params.profile` 沿用、不换号），make / map:fetch 过程中不换号，邀请操作也不要改掉它。
+- 用户没给预算时，先按 `rules/flova-credits.md` 用 `account_info` 和策略计算；仍然不知道要补多少再问一个数字，问完再调；不要因为没预算就拒绝，也不要去其他仓库跑报价脚本。
+- 凭证、token、cookie 不进对话、不进 git、不进命令行、不进项目文件；不手改凭证 YAML。
+- 这是用户发起的账号操作，与「流水线失败后不自动邀号」同时成立。
 - 生成后放进 `projects/<cat>/<id>/assets/flova/`，再跑 `npm run assets:import -- <dir>`，并在 `assets/manifest.json` 补齐：`source:"flova"`、`model`、`prompt`、`watermarked`、`license`、`ai:true`、`usage:"decorative"|"transition"`。check 对缺字段或 `watermarked:true` 直接失败；画面自动加“AI生成”角标，发布时勾选 AI 标注。
 
 ## 3E. 地图是必选项 + 地图底图图片重绘（Agent 执行，不生成视频）
@@ -150,10 +161,10 @@ npm run make -- "<一句话>" [--style mediastorm] [--ratio 4x3] [--voice edge|q
 - 数字只能用高德返回值（POI 直线距离由高德坐标计算，路线来自高德路径规划）。画面只写“约 N 米 · …距离（来源）”，不写“X 分钟到”（banned_words 会拦；耗时保存在 `route.json` / 镜头 `route_ref`，仅供参考）。
 - 地图脚本配置在 `config/map-tools.json`（默认 `~/.agents/skills/map-tools/scripts/map.py`，可用环境变量 `MAP_TOOLS_SCRIPT` 覆盖），默认高德、GCJ-02，密钥只放 `~/.config/map-tools/keys.json`，不进仓库。
 - 署名：真实高德静帧用 `地图数据 © 高德地图（示意，非测绘成果）`；AI 重绘底图必须用 `示意图 / AI 生成底图 / © 高德地图`；没取到高德数据的示意底图用 `示意图 / 示意底图（非真实地图）/ © 高德地图`；由 map:fetch 写入 `map/geo.json.attribution`，check 会核对。
-- flova 默认开启，积分**不是限制**：brief 里没有 `credit_budget`（旧 brief 里有也会被忽略）。生成失败（包括积分原因）→ 把错误原文告诉用户，不绕过；不使用邀请/多账号/刷积分。
+- flova 默认开启，积分**不是限制**：brief 里没有 `credit_budget`（旧 brief 里有也会被忽略）。生成失败（包括积分原因）→ 把错误原文告诉用户，不绕过；做片流程里不自动邀号；用户当次明确说「进行积分邀请」时按 §3C 执行，不得拒绝。
 - 需要重绘时是 **Agent 步骤**（仓库 Python 调不了 MCP），流程是原来的“图片重绘”：高德静态图 `map/static.png` → flova 图像生成 → 无水印原图存成 `map/base_ai.png` → 代码叠标签/距离：
-  1. 跑 `npm run make -- ...`（或 `npm run map:fetch -- <项目>`）到 map:fetch：写 `map/flova_request.json`（`tool=generate_image`、`model=gpt-image-2.5-sunburst`、`prompt`、`source_image=map/static.png`、`output_image=map/base_ai.png`、`params={profile:"kid4", original:true}`），`map/base_ai.png` 不存在时退出码 3 并打印说明。
-  2. 调 flova-image 的 `generate_image`（gpt-image-2.5 系列，见 `config/flova-models.json`）：`prompt=request.prompt`，参考图传 `map/static.png` 的绝对路径，参数 `profile="kid4"`、`original=true`。**不要调 `generate_video`，地图不用视频动画。**
+  1. 跑 `npm run make -- ...`（或 `npm run map:fetch -- <项目>`）到 map:fetch：写 `map/flova_request.json`（`tool=generate_image`、`model=gpt-image-2.5-sunburst`、`prompt`、`source_image=map/static.png`、`output_image=map/base_ai.png`、`params={profile:"<当前活跃母号 profile>", original:true}`，profile 由 map:fetch 解析当前活跃母号、已写 profile 沿用），`map/base_ai.png` 不存在时退出码 3 并打印说明。
+  2. 调 flova-image 的 `generate_image`（gpt-image-2.5 系列，见 `config/flova-models.json`）：`prompt=request.prompt`，参考图传 `map/static.png` 的绝对路径，参数 `profile="<当前活跃母号>"`（`~/.flova/registry.json` 的 `active_mother_profile`；request 里已有非空 `params.profile` 时沿用该 profile）、`original=true`；make / map:fetch 过程中不换号。**不要调 `generate_video`，地图不用视频动画。**
   3. 把返回的无水印原图存成 `<项目>/map/base_ai.png`。
   4. 原命令重跑：幂等地把它转成 `map/satellite_4x3.jpg`（原高德卫星图备份为 `map/amap_satellite_4x3.jpg`），`geo.json` 写 `base=ai_repaint`、`repaint.status=done`、署名改为 `示意图 / AI 生成底图 / © 高德地图`；再跑 `npm run assets:import -- <dir> --force` 把底图登记成 AI 素材（ai:true、decorative）。check 在 `repaint.status=pending` 时报未完成。
   - `--mock`、`flova.allowed=false` 或没取到高德数据时不走这一步：用带标注的示意底图（或高德原图）；关掉重绘且 `map/amap_satellite_4x3.jpg` 还在时会把原图拷回卫星图。
@@ -187,10 +198,11 @@ npm run make -- "<一句话>" [--style mediastorm] [--ratio 4x3] [--voice edge|q
 6. **不得使用**绝对化用语、升值/投资回报承诺、学区/落户承诺、“X分钟到地铁”式时间表述、风水迷信、零首付/首付分期/售后包租等（完整列表见 `rules/compliance/common.md` 与 `pipeline/check/banned_words.json`）。
 7. **不得模板化批量出片**：视频号公约禁止脚本雷同、表现形式高度一致的视频。每条视频的口播、镜头、节奏要真正不同（见 `rules/style.md`）。
 8. **不得随意改动 `vendor/qwentts.cpp`**（子模块）；不要擅自编译或下载大模型，除非用户要求。
-9. **不得在仓库外写文件**（读取可以）。
+9. **不得在仓库外写文件**（读取可以）；用户当次明确要求的 flova 加号、清号，只用本机 flova CLI，凭证仍只在 `~/.flova` 和浏览器配置目录；注册与邀请结束后默认 profile 是 `prod`（脚本会执行 `profile use prod`）。注册只更新 `~/.flova/registry.json` 的引用和状态，不写 token 或 cookie。
 10. **不得提交** `projects/`（除 `_example`）、`assets/warehouse/` 媒体文件、`.env`、地图密钥、CRM 登录态或任何 token。
 11. 不得读取 crm_connector `run/*`、cookie、token；不得调用 house-info；不得修改用户本机 MCP 客户端配置（仓库内 `.mcp.json` / `.grok/config.toml` 是项目配置，不在此列）；不得用 AI 生成事实性房源画面。
 12. AI 配音/克隆必须有本人书面授权（放 `consent/` 或 `voices/clone/`），并在发布时勾选 AI 标注。
+13. **不得运行、导入或复制其他 git 仓库的代码**（包括本机其他仓库，如 vswp 目录下的其他项目）；本仓库 npm scripts、本仓库已声明的 MCP、规则里点名的 map-tools 脚本不在此列。本仓库 `scripts/flova/` 是邀请/注册的唯一入口，不要去执行其他仓库的 `flova_invite.py`。
 
 ## 6. 规则索引（改代码或写文案前先读）
 
@@ -202,8 +214,12 @@ npm run make -- "<一句话>" [--style mediastorm] [--ratio 4x3] [--voice edge|q
 - `docs/one-sentence-workflow.md`（给用户的版本：`docs/one-sentence-workflow.docx`）
 - `docs/crm.md` — 云端 CRM 与本项目取数（Word：`docs/crm.docx`）
 - `rules/workflow.md` — 流程与发布前自检
+- `rules/flova-credits.md` — 积分邀请、选号、清号、接班（配合 `config/flova-credits-policy.json`）
+- `rules/flova-register.md` — 子号注册与激活（实现是 `scripts/flova/`；账本字段见 `config/flova-registry-schema.json`）
 - `rules/reference/` — 原始调研（含全部来源链接）
 - `docs/tts.md`、`docs/new-project.md`
+- `docs/kaggle-gpu.md` — Kaggle 免费 GPU 外包（抠像、声音克隆；Remotion 渲染不上 Kaggle；每期独立数据集）；grok 操作清单 `docs/TASK-kaggle.md`
+- `docs/matting.md` — 人像抠像，本地首选（`scripts/matting/matte_local.cmd` 默认 MatAnyone2，失败自动回退 RobustVideoMatting），Kaggle 为后备
 
 ## 7. 编码约定
 
@@ -213,3 +229,27 @@ npm run make -- "<一句话>" [--style mediastorm] [--ratio 4x3] [--voice edge|q
 - 给用户看的文档必须是 .docx 或 .pdf（仓库内保留 .md 源）。
 - 字体只用可免费商用的，并把许可证放在字体旁（`remotion/src/assets/fonts/README.md`）。
 - 提交信息用英文。
+
+## map-hub 口播 series (@贝壳-TV) — end-to-end runbook
+- **Start here:** `docs/RUNBOOK-map-hub-koubo.md` (listing → POIs → script → F5 voice clone → Muse via Playwright → annotations →
+  HeyGen via Playwright → matting → assemble → QA, plus the user's taste rules).
+- Code: `templates/map-hub/remotion/` (Remotion 4.0.529, comps `MapHubHeygen`, `MapHubKoubo`, `Opener`) + `pipeline/maphub/*.py`.
+  Rules: `rules/map-hub/`. Example episode: `projects/map-hub/ep07-xihu/`.
+- Always `python pipeline/maphub/stage.py projects/map-hub/<ep>` first: it links the template's `public/` and `src/episode/`
+  into that episode, so every generated file stays inside the episode folder (no cross-episode references).
+- Only the user's own HeyGen avatar ("Cool Breeze") and cloned voice; never modify the user's raw recordings; never touch
+  `.mcp.json` / `.grok/`; no commit/push unless asked.
+
+### Trigger: `做视频 <ep>` / `make-video <ep>` (fixed workflow)
+When the user says **做视频 epNN-xxx** (or "make video epNN-xxx"):
+1. If `projects/map-hub/<ep>/episode.yaml` does not exist, ask for category + Beike listing id/url (+ footage folder) and run
+   `python scripts/new_episode.py --id <ep> --category <cat> --listing <id> [--footage <dir>]` — do not improvise a layout.
+2. Read `episode.yaml` (single source of truth) and follow `docs/RUNBOOK-map-hub-koubo.md` stage by stage, starting at the first
+   stage whose `status` is not `done`; update `status` + `jobs/progress.md` after each passing check. Footage rules: `docs/FOOTAGE-SPEC.md`.
+3. Long stages run detached: `scripts\make-video.cmd <ep> [stage]` (logs in `<ep>/jobs/<stage>.log`, resumable).
+New episode skeleton: `scripts\new_episode.cmd --id ep08-xxx --category rental --listing <id/url> [--footage <dir>]`.
+
+### Shared resources (do not copy per episode)
+- Presenter: `assets/presenter/cool-breeze/presenter.yaml` — HeyGen avatar Cool Breeze, voice clone ref + F5 seed/speed, Muse avatar ref, matting.
+  episode.yaml says `presenter: cool-breeze`; optional `presenter_override` per episode. Never edit the profile for one episode.
+- Fonts + brand logos: `templates/map-hub/shared/public/{fonts,brands}` (linked into each episode by stage.py).

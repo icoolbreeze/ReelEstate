@@ -6,6 +6,8 @@ import type { EffectId, EffectPool, EffectsDoc } from "./types";
 
 export const poolForShot = (shot: Shot, presenterSeen: number): EffectPool => {
   switch (shot.type) {
+    case "hook":
+      return "opener";
     case "presenter":
       return presenterSeen === 0 ? "opener" : "chapter_title";
     case "broll":

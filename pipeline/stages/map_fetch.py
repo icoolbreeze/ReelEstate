@@ -7,8 +7,10 @@ live_status is recorded so the sample report is accurate.
 
 The map is a mandatory part of every video. Extra outputs: map/route.json (Amap route distance/duration,
 only Amap-returned numbers) and the flova IMAGE repaint hand-off: flova is an MCP that only the agent can call, so
-this stage writes map/flova_request.json (generate_image, gpt-image-2.5 family, profile kid4, original:true, reference
-map/static.png) and exits 3 (NeedInput) until the agent saved map/base_ai.png; the code then overlays labels/distances.
+this stage writes map/flova_request.json (generate_image, gpt-image-2.5 family, profile pinned to the current active
+mother via resolve_map_profile — an existing params.profile is kept and accounts are never switched; original:true,
+reference map/static.png) and exits 3 (NeedInput) until the agent saved map/base_ai.png; the code then overlays
+labels/distances.
 No video generation for the map (generate_video is off by default everywhere; see brief flova.video_allowed).
 --mock / flova.allowed=false / no live Amap data: no repaint, labelled placeholder or real Amap imagery is kept.
 Credits are handled by the flova MCP and are never a limit; failures are surfaced to the user, not worked around.
@@ -27,6 +29,8 @@ from .common import NeedInput, load_brief, load_json, now_iso, save_json
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MAP_PY = Path.home() / ".agents" / "skills" / "map-tools" / "scripts" / "map.py"
 MAP_CONFIG = REPO_ROOT / "config" / "map-tools.json"
+POLICY_PATH = REPO_ROOT / "config" / "flova-credits-policy.json"
+REGISTRY_PATH = Path.home() / ".flova" / "registry.json"
 ATTRIBUTION = "地图数据 © 高德地图（示意，非测绘成果）"
 
 # Used when config/map-tools.json is missing or broken: finding the script must never crash the stage.
@@ -117,17 +121,69 @@ def _placeholder_satellite(out: Path, label: str) -> None:
 
 ATTR_AI = "示意图 / AI 生成底图 / © 高德地图"
 ATTR_SCHEMATIC = "示意图 / 示意底图（非真实地图）/ © 高德地图"
-# Image generation only (never generate_video): original non-watermarked image. The map repaint is the one place
-# that passes profile kid4 (user decision). Model: gpt-image-2.5 family, see config/flova-models.json.
+# Image generation only (never generate_video): original non-watermarked image. The map repaint pins the current
+# active mother profile (resolve_map_profile); a request that already names params.profile stays on it — never hop
+# accounts during make / map:fetch. Model: gpt-image-2.5 family, see config/flova-models.json.
 FLOVA_TOOL = "generate_image"
 FLOVA_MODEL = "gpt-image-2.5-sunburst"  # polished image edit from a reference image (config/flova-models.json)
-FLOVA_PARAMS = {"profile": "kid4", "original": True}
 FLOVA_PROMPT = (
     "Restyle this Amap road map into a clean, bright, low-saturation illustrated map for a real-estate short "
     "video. Keep the road network, water bodies, blocks and the centre marker exactly where they are. Do not add, "
     "remove, move or invent roads, buildings, landmarks or text. No labels, no logos, no watermark, no people. "
     "4:3 landscape."
 )
+
+
+def _load_dict(p: Path) -> dict:
+    """Read a JSON object; missing file / corrupt content / non-object = empty dict (never crashes the stage)."""
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def resolve_map_profile(existing_request, *, registry=None, policy=None) -> str:
+    """Resolve the flova profile the map-base repaint is pinned to. No account hopping, no credit balancing.
+
+    Order:
+      1. existing_request["params"]["profile"] when non-empty after strip (request stays on its profile)
+      2. registry["active_mother_profile"] when non-empty (current active mother)
+      3. first registry accounts[] entry with role=="mother" and api_key_ref "flova-profile:<name>" -> <name>
+      4. policy["mother"]["default_profile"] when non-empty
+      5. "prod"
+    When registry/policy are None they are read from disk (~/.flova/registry.json, missing = {};
+    config/flova-credits-policy.json relative to the repo root). Never reads credentials.yaml; no tokens here.
+    """
+    params = (existing_request or {}).get("params")
+    if not isinstance(params, dict):
+        params = {}
+    profile = params.get("profile")
+    if isinstance(profile, str) and profile.strip():
+        return profile.strip()  # 1. request already names a profile -> pin it
+
+    if registry is None:
+        registry = _load_dict(REGISTRY_PATH)
+    active = registry.get("active_mother_profile")
+    if isinstance(active, str) and active.strip():
+        return active.strip()  # 2. current active mother
+
+    for acc in registry.get("accounts") or []:  # 3. mother account referenced by a flova-profile key ref
+        if isinstance(acc, dict) and acc.get("role") == "mother":
+            ref = acc.get("api_key_ref")
+            if isinstance(ref, str) and ref.startswith("flova-profile:"):
+                name = ref.split(":", 1)[1].strip()
+                if name:
+                    return name
+
+    if policy is None:
+        policy = _load_dict(POLICY_PATH)
+    mother = policy.get("mother")
+    default = mother.get("default_profile") if isinstance(mother, dict) else None
+    if isinstance(default, str) and default.strip():
+        return default.strip()  # 4. policy default
+
+    return "prod"  # 5. ultimate fallback
 
 
 def _is_mock(brief: dict, listing: dict) -> bool:
@@ -221,6 +277,9 @@ def _repaint_step(project_dir: Path, brief: dict, listing: dict, geo: dict) -> d
         return {"base": geo["base"], "repaint": "skipped"}
 
     rel_dir = project_dir.name
+    existing_request = load_json(req_p) if req_p.exists() else {}
+    profile = resolve_map_profile(existing_request)  # pin active mother; existing params.profile is kept, never switch
+    flova_params = {"profile": profile, "original": True}
     request = {
         "purpose": "Repaint the Amap static map into a stylised base map (agent-performed via the flova-image MCP; repo Python cannot call MCP). Image only, no video.",
         "tool": FLOVA_TOOL,  # flova-image MCP (declared in the repo .mcp.json / .grok/config.toml): image generation only, never generate_video
@@ -228,11 +287,11 @@ def _repaint_step(project_dir: Path, brief: dict, listing: dict, geo: dict) -> d
         "prompt": FLOVA_PROMPT,
         "source_image": "map/static.png",
         "output_image": "map/base_ai.png",
-        "params": dict(FLOVA_PARAMS),
-        "credits": "handled by the flova MCP; not a limit. If generation fails (including for credit reasons) report the error to the user; do not work around it.",
+        "params": dict(flova_params),
+        "credits": "handled by the flova MCP; not a quota. If generation fails (including for credit reasons), report the raw error to the user and do not work around it automatically in this repaint (no profile switching). Only when the user explicitly requests a credit invite (e.g. '进行积分邀请') in this turn, follow AGENTS.md §3C; do not use this field to refuse that request.",
         "label": ATTR_AI,
         "status": "pending",
-        "created_at": (load_json(req_p).get("created_at") if req_p.exists() else None) or now_iso(),
+        "created_at": (existing_request.get("created_at") if existing_request else None) or now_iso(),
     }
     if not base_ai.exists():
         save_json(req_p, request)
@@ -244,10 +303,10 @@ def _repaint_step(project_dir: Path, brief: dict, listing: dict, geo: dict) -> d
         text = (
             f"map:fetch 需要 Agent 用 flova 图像生成重绘地图底图（仓库 Python 调不了 MCP；只生图，不生成视频）：\n"
             f"    1. 读 {proj}/map/flova_request.json（prompt / source_image / output_image / params）\n"
-            f"    2. 调 flova-image 的 generate_image（model={FLOVA_MODEL}，gpt-image-2.5 系列）：prompt=request.prompt，参考图={proj}/map/static.png，参数 profile=\"kid4\"、original=true；不要调 generate_video\n"
+            f"    2. 调 flova-image 的 generate_image（model={FLOVA_MODEL}，gpt-image-2.5 系列）：prompt=request.prompt，参考图={proj}/map/static.png，参数 profile=\"{profile}\"、original=true；不要调 generate_video，不要换号\n"
             f"    3. 把返回的无水印原图保存为 {proj}/map/base_ai.png\n"
             f"    4. 重跑同一命令（或 npm run map:fetch -- {proj}）\n"
-            f"    积分由 flova MCP 自行处理，不是限制；若生成失败（含积分原因），把错误原文告诉用户，不要绕过，不要用邀请/多账号等方式。"
+            f"    积分由 flova MCP 自行处理，不是限制；若生成失败（含积分原因），把错误原文告诉用户，不要绕过，不要在这次地图重绘里自动邀号或换号；用户当次明确说『进行积分邀请』时按 AGENTS.md §3C 执行，不得拒绝。"
         )
         print("\n" + text)
         raise NeedInput([{"key": "map.base_ai", "q": text, "blocks": "map:fetch"}])
@@ -258,7 +317,7 @@ def _repaint_step(project_dir: Path, brief: dict, listing: dict, geo: dict) -> d
             shutil.copy2(sat_p, amap_copy)  # keep the real Amap satellite next to the AI base
         _to_4x3_jpg(base_ai, sat_p)
         geo.update({"base": "ai_repaint", "base_ai": "map/base_ai.png", "base_ai_sha1": sha, "attribution": ATTR_AI,
-                    "flova_prompt": FLOVA_PROMPT, "flova_params": dict(FLOVA_PARAMS), "flova_model": FLOVA_MODEL})
+                    "flova_prompt": FLOVA_PROMPT, "flova_params": dict(flova_params), "flova_model": FLOVA_MODEL})
         geo.pop("map_motion", None)
     request["status"] = "done"
     save_json(req_p, request)

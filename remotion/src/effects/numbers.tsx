@@ -16,17 +16,22 @@ const SPIN = 0.85; // rows per frame while spinning
 const placeTop = (z: Zones, want: number, h: number, width = 1000) => Math.min(want, bottomLimit(z, (W - width) / 2, (W + width) / 2) - h);
 
 /** Continuous strip position (rows) for reel i landing on digit d; lock order left→right. */
-const reelPos = (f: number, i: number, d: number, start: number): number => {
-  const s = start + i * 6;
+const reelPos = (f: number, i: number, d: number, start: number, stagger = 6, settle = 20): number => {
+  const s = start + i * stagger;
   const p0 = SPIN * s;
   const T = Math.ceil((p0 + 6 - d) / 10) * 10 + d;
+  const brake = Math.round(settle * 0.7);
+  const rest = settle - brake;
   if (f < s) return SPIN * Math.max(f, 0);
-  if (f < s + 14) return lerp(ease.outCubic((f - s) / 14), p0, T + 0.5);
-  if (f < s + 20) return lerp(ease.outCubic((f - s - 14) / 6), T + 0.5, T);
+  if (f < s + brake) return lerp(ease.outCubic((f - s) / Math.max(1, brake)), p0, T + 0.5);
+  if (f < s + settle) return lerp(ease.outCubic((f - s - brake) / Math.max(1, rest)), T + 0.5, T);
   return T;
 };
 
-const Odometer: React.FC<{ value: string; st: StyleTokens; size: number; color: string; start?: number }> = ({ value, st, size, color, start = 8 }) => {
+export const Odometer: React.FC<{
+  value: string; st: StyleTokens; size: number; color: string;
+  start?: number; stagger?: number; settle?: number;
+}> = ({ value, st, size, color, start = 8, stagger = 6, settle = 20 }) => {
   const f = useCurrentFrame();
   const row = Math.round(size * 1.1);
   const dw = Math.round(size * 0.62);
@@ -36,8 +41,8 @@ const Odometer: React.FC<{ value: string; st: StyleTokens; size: number; color: 
       return <div key={k} style={{ height: row, lineHeight: `${row}px`, fontSize: size, fontFamily: st.fonts.latin, fontWeight: 800, color }}>{ch}</div>;
     }
     const i = di++;
-    const pos = reelPos(f, i, Number(ch), start);
-    const speed = Math.abs(pos - reelPos(f - 1, i, Number(ch), start));
+    const pos = reelPos(f, i, Number(ch), start, stagger, settle);
+    const speed = Math.abs(pos - reelPos(f - 1, i, Number(ch), start, stagger, settle));
     const ghost = Math.min(1, Math.max(0, (speed - 0.06) / 0.44));
     const strip = (dy: number, op: number) => (
       <div style={{ position: "absolute", left: 0, top: 0, width: dw, transform: `translateY(${-(pos % 10) * row + dy}px)`, opacity: op }}>
@@ -54,7 +59,7 @@ const Odometer: React.FC<{ value: string; st: StyleTokens; size: number; color: 
       </div>
     );
   });
-  const lockF = start + Math.max(0, di - 1) * 6 + 20;
+  const lockF = start + Math.max(0, di - 1) * stagger + settle;
   const pulse = prog(f, lockF, lockF + 4) * (1 - prog(f, lockF + 4, lockF + 10));
   return <div style={{ display: "flex", alignItems: "center", transform: `scale(${1 + 0.035 * pulse})` }}>{cells}</div>;
 };

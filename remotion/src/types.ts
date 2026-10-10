@@ -63,7 +63,7 @@ export type Project = RenderExtras & {
 // Mirrors pipeline/schema/shots.json + fields injected by pipeline/render.py.
 export type StyleName = "mediastorm";
 export type ShotPresenter = PresenterMode | "none";
-export type ShotType = "presenter" | "wall" | "map" | "room" | "broll" | "spec" | "number" | "outro";
+export type ShotType = "presenter" | "wall" | "map" | "room" | "broll" | "spec" | "number" | "outro" | "hook";
 
 export type RoomInfo = { zh: string; en?: string; pill?: string; index?: number; total?: number };
 export type SpecInfo = { title: string; lines: string[]; variant?: "default" | "warning" };
@@ -79,6 +79,7 @@ export type Shot = {
   media?: string; // image/video relative to project dir
   locator?: string; // floorplan room key to highlight
   push?: boolean; // slow push-in on media
+  crashZoom?: boolean; // six-frame hard push-in from the hook cut (shotcraft crash-zoom-punch)
   room?: RoomInfo;
   spec?: SpecInfo;
   location?: LocationInfo;

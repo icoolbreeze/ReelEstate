@@ -8,7 +8,9 @@ import { ensureFonts } from "../styles/fonts";
 import { getStyle } from "../styles";
 import type { StyleTokens } from "../styles/types";
 import type { Project, Shot } from "../types";
+import { CrashZoomMedia } from "./CrashZoomMedia";
 import { DataNumber } from "./DataNumber";
+import { HookShot } from "./HookShot";
 import { FloorplanLocator } from "./FloorplanLocator";
 import { ListingWall } from "./ListingWall";
 import { LocationLabel } from "./LocationLabel";
@@ -82,10 +84,12 @@ const ShotScene: React.FC<{ it: ShotItem; project: Project; st: StyleTokens; fx:
   const background = (() => {
     if (shot.type === "wall" && project.wall) return <ListingWall wall={project.wall} st={st} />;
     if (shot.type === "map" && project.map) return <MapReveal image={project.map.image} attribution={project.map.attribution} st={st} showMarker={!shot.location} />;
+    if (shot.type === "hook") return <HookShot shot={shot} st={st} duration={it.duration} />;
     if (fullPresenter && clip) return <StylePresenter clip={clip} mode="fullscreen" st={st} startFrom={it.from} />;
     if (shot.media) {
       const dim = shot.type === "spec" ? 0.42 : shot.type === "number" ? 0.55 : 0;
       const media = <Media file={shot.media} st={st} push={shot.push} dim={dim} />;
+      if (shot.crashZoom) return <CrashZoomMedia file={shot.media} st={st} duration={it.duration} />;
       if (shot.push) return media;
       // video-taste §7.4: no fully static window ≥0.8 s. Un-pushed stills get a barely-there hold drift (≤2.5 %).
       const drift = 1 + 0.025 * (f / Math.max(1, it.duration));
@@ -105,16 +109,17 @@ const ShotScene: React.FC<{ it: ShotItem; project: Project; st: StyleTokens; fx:
       {shot.type === "spec" && !shot.media && fullPresenter ? <AbsoluteFill style={{ background: "linear-gradient(90deg, rgba(0,0,0,.55), rgba(0,0,0,0) 70%)" }} /> : null}
       {shot.type === "spec" && shot.media ? <AbsoluteFill style={{ background: "linear-gradient(90deg, rgba(0,0,0,.35), rgba(0,0,0,0) 75%)" }} /> : null}
       {shot.room ? <RoomCard room={shot.room} st={st} /> : null}
-      {shot.location && replaces !== "location" ? <LocationLabel loc={shot.location} st={st} /> : null}
+      {shot.location && replaces !== "location" && shot.type !== "hook" ? <LocationLabel loc={shot.location} st={st} /> : null}
       {shot.spec && replaces !== "spec" ? <SpecCard spec={shot.spec} st={st} /> : null}
-      {shot.number && replaces !== "number" ? <DataNumber num={shot.number} st={st} /> : null}
+      {shot.number && replaces !== "number" && shot.type !== "hook" ? <DataNumber num={shot.number} st={st} /> : null}
       {shot.type === "outro" && replaces !== "outro" ? <OutroCTA cta={shot.cta ?? "点击下方组件 预约看房"} agency={project.agency.full_name} st={st} frame={f} /> : null}
       {showLocator ? <FloorplanLocator rooms={rooms} current={shot.locator} st={st} schematic={project.shots?.floorplan?.schematic} /> : null}
-      <EffectLayer id={effectId} it={it} project={project} st={st} />
+      {shot.type !== "hook" ? <EffectLayer id={effectId} it={it} project={project} st={st} /> : null}
       {pip && clip ? <StylePresenter clip={clip} mode={pip} st={st} startFrom={it.from} /> : null}
       {tag ? <SourceTag text={tag} st={st} /> : null}
       <ShotBadge labels={labels} st={st} />
-      {!(shot.type === "wall" && f > it.duration * 0.55) ? (
+      {!(shot.type === "wall" && f > it.duration * 0.55)
+        && !shot.spec && !shot.number && !shot.room && !shot.location && shot.type !== "outro" ? (
         <Sequence from={it.segFrom - it.from} layout="none">
           <StyleCaptions text={it.segText} st={st} speechFrames={it.speechFrames} left={capL} right={capRight} bottom={capBottom} />
         </Sequence>

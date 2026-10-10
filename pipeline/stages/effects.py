@@ -42,6 +42,8 @@ POOL_BY_TYPE = {
 def pool_for_shot(shot: dict, presenter_seen: int) -> str:
     """Keep in sync with remotion/src/effects/select.ts (poolForShot)."""
     t = shot.get("type") or "broll"
+    if t == "hook":
+        return "opener"
     if t == "presenter":
         return "opener" if presenter_seen == 0 else "chapter_title"
     if t == "broll":

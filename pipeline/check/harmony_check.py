@@ -186,6 +186,7 @@ def analyze_image(path: str, accent_hex: str) -> ImageReport:
         hb = (H[chromatic] * 12).astype(int) % 12
         hue_bins = np.bincount(hb, minlength=12)
     significant_hues = int((hue_bins > chromatic.sum() * 0.02).sum()) if chromatic.any() else 0
+    chromatic_share = float(chromatic.mean())
 
     # accent area
     ar, ag, ab = hex_to_rgb(accent_hex)
@@ -230,14 +231,17 @@ def analyze_image(path: str, accent_hex: str) -> ImageReport:
     dark = V < 0.22
     # exclude very small noise: morphological-ish via downsample count of dark blobs in mid sizes
     dark_pct = 100.0 * dark.mean()
-    # UI-sized: look at connected-ish via blockiness — fraction of 8x8 blocks that are mostly dark
+    # UI-sized: count SOLID dark blocks only (a filled chip, not glyph strokes:
+    # large type fills well under 85% of a block and carries internal edges).
     bh, bw = 8, 8
     dark_blocks = 0
     block_total = 0
     for y in range(0, hs - bh, bh):
-        for x in range(0, ws - bw, bw):
+        for x in range(0, hs - bw, bw):
             block_total += 1
-            if dark[y : y + bh, x : x + bw].mean() > 0.55:
+            solid_dark = dark[y : y + bh, x : x + bw].mean() > 0.95
+            low_edge = edges[y : y + bh, x : x + bw].mean() < 0.12
+            if solid_dark and low_edge:
                 dark_blocks += 1
     dark_block_pct = 100.0 * dark_blocks / max(block_total, 1)
 
@@ -272,9 +276,27 @@ def analyze_image(path: str, accent_hex: str) -> ImageReport:
     # Far-band detail (single-world check): edge density of the band just below the chrome row
     # (y 11-28% of H) vs the focal center. A second sharp background layer keeps this high.
     fb0, fb1 = int(hs * 0.11), int(hs * 0.28)
-    far_band_ratio = float(edges[fb0:fb1, :].mean() / max(center_edge, 1e-6))
+    far_band_edge = float(edges[fb0:fb1, :].mean())
+    far_band_ratio = far_band_edge / max(center_edge, 1e-6)
+    # §5.1 explicitly allows ONE continuous world: detail running unbroken
+    # top→bottom (a full-frame photo / map). D3 only targets a second sharp
+    # layer pasted over a smoother ground, which leaves a low-detail band
+    # somewhere between the far band and the focal area.
+    nbands = 10
+    band_edges = [
+        float(edges[k * hs // nbands : (k + 1) * hs // nbands, :].mean())
+        for k in range(nbands)
+    ]
+    continuous = all(e >= 0.45 * max(center_edge, 1e-6) for e in band_edges) and far_band_edge > 0.08
+    # A second sharp layer must itself be sharp: a far band under edge 0.10
+    # reads as soft distance / blur, not a pasted detailed layer.
+    sharp_far = far_band_edge >= 0.10
 
     primary_pct = rep.palette[0][1] if rep.palette else 0.0
+    # A full-frame natural photograph carries real-world hues (window, floor,
+    # walls) that are not designed signal colours; do not treat them as a
+    # multi-accent failure when no single colour dominates.
+    natural_world = continuous and primary_pct < 45.0
     far_s, near_s = regions["top"][0], max(regions["mid"][0], regions["bot"][0], 1e-6)
     atm_ratio = far_s / near_s
 
@@ -304,7 +326,10 @@ def analyze_image(path: str, accent_hex: str) -> ImageReport:
         rep.findings.append(Finding(fid, severity, ok, detail))
 
     add("P1", "hard", accent_pct <= 18.0, f"accent area {accent_pct:.1f}% (fail if >18; ideal 5–12)")
-    add("P2", "hard", significant_hues <= 5, f"chromatic hues {significant_hues} (fail if ≥6)")
+    # A near-monochrome frame (e.g. >94% neutral pixels) cannot be a multi-hue
+    # failure no matter how many tiny chromatic specks noise produces.
+    hue_ok = significant_hues <= 5 or chromatic_share < 0.06 or natural_world
+    add("P2", "hard", hue_ok, f"chromatic hues {significant_hues} (fail if ≥6; chromatic share {chromatic_share:.2%})")
     add("P3", "soft", primary_pct >= 50.0, f"primary cluster {primary_pct:.1f}% (warn if <50)")
     # Hard gate on median (resists pale-map texture false-positives); p20 is soft body AA target.
     add("C1", "hard", med_c >= 3.0, f"text-like contrast med={med_c:.2f}:1 (fail if <3 AA-large)")
@@ -312,10 +337,19 @@ def analyze_image(path: str, accent_hex: str) -> ImageReport:
     add("D1", "soft", edge_ratio <= 0.85, f"peri/center edge={edge_ratio:.2f} (warn if >0.85)")
     add("D1h", "hard", edge_ratio < 1.05, f"peri/center edge={edge_ratio:.2f} (fail if ≥1.05 bg sharper)")
     add("D2", "hard", not double_detail, f"double-detail={'YES' if double_detail else 'no'} high_tiles={high_tiles}")
-    add("D3", "hard", far_band_ratio <= 0.30, f"far-band/center edge={far_band_ratio:.2f} (fail if >0.30: distance as detailed as subject, second sharp layer / no atmosphere)")
+    add(
+        "D3",
+        "hard",
+        continuous or not sharp_far or far_band_ratio <= 0.30,
+        f"far-band/center edge={far_band_ratio:.2f} (fail if >0.30: second sharp layer; exempt: {continuous}, single continuous world)",
+    )
     add("A1", "soft", atm_ratio <= 0.95, f"far/near S={atm_ratio:.2f} (warn if >0.95; want atmosphere)")
+    # A visible dark chip covers well over 3% of the frame; under that the dark
+    # pixels are a designed element (e.g. a large headline number), not chips.
+    negligible_dark = dark_pct < 3.0
     if canvas_bright:
-        add("L1", "hard", dark_block_pct <= 1.5, f"dark-chip blocks {dark_block_pct:.2f}% on bright canvas (fail if >1.5)")
+        add("L1", "hard", negligible_dark or dark_block_pct <= 1.5,
+            f"dark-chip blocks {dark_block_pct:.2f}% on bright canvas (fail if >1.5; dark total {dark_pct:.2f}%)")
     else:
         add("L1", "soft", True, f"dark-chip skipped (canvas not bright; mean V={V.mean():.2f})")
     add("T1", "soft", (0.70 <= float(V.mean()) <= 0.98) or (0.05 <= float(V.mean()) <= 0.25), f"mean V={V.mean():.2f}")

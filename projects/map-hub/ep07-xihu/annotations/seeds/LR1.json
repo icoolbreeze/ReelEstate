@@ -1,0 +1,49 @@
+{
+ "t": 1.17,
+ "targets": [
+  {
+   "id": "t0",
+   "label": "整面落地窗",
+   "sub": "FLOOR-TO-CEILING WINDOW",
+   "box": [
+    0.62,
+    0.08,
+    0.38,
+    0.66
+   ]
+  },
+  {
+   "id": "t1",
+   "label": "布艺沙发",
+   "sub": "FABRIC SOFA",
+   "box": [
+    0.0,
+    0.54,
+    0.51,
+    0.4
+   ]
+  },
+  {
+   "id": "t2",
+   "label": "木茶几",
+   "sub": "WOOD COFFEE TABLE",
+   "box": [
+    0.27,
+    0.77,
+    0.53,
+    0.21
+   ]
+  },
+  {
+   "id": "t3",
+   "label": "落地灯",
+   "sub": "FLOOR LAMP",
+   "box": [
+    0.4,
+    0.35,
+    0.08,
+    0.25
+   ]
+  }
+ ]
+}

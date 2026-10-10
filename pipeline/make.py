@@ -12,8 +12,9 @@ Stages (idempotent; skip if outputs exist unless --force):
   2 listing:wall     → wall.json + raw/wall/*
   3 map:fetch        → map/geo.json + satellite_4x3.jpg + static.png + pois.json + route.json
                        (mandatory; flova IMAGE repaint is agent-performed: map:fetch writes map/flova_request.json
-                        (generate_image, gpt-image-2.5, profile kid4, original) and exits 3 until map/base_ai.png
-                        exists; no video generation (flova.video_allowed defaults to false);
+                        (generate_image, gpt-image-2.5, profile pinned to the active mother via resolve_map_profile —
+                        an existing params.profile is kept, no account hopping; original) and exits 3 until
+                        map/base_ai.png exists; no video generation (flova.video_allowed defaults to false);
                         --mock / flova.allowed=false use the labelled placeholder)
   4 assets:import    → assets/manifest.json (+ seed warehouse stock)
   4b effects         → effects.json (curated seeded effect picks; --reseed to redraw)

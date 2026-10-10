@@ -1,0 +1,44 @@
+{
+  "$comment": "总账本 ~/.flova/registry.json 的字段规范。只存引用与状态，绝不存明文 token 或 cookie。",
+  "type": "object",
+  "properties": {
+    "version": { "type": "string" },
+    "updated_at": { "type": "string" },
+    "active_mother_profile": {
+      "type": "string",
+      "description": "当前活跃母号的 CLI profile；promote_mother 切换时写入"
+    },
+    "accounts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["email", "role", "state"],
+        "properties": {
+          "email": { "type": "string" },
+          "user_id": { "type": "string" },
+          "role": { "enum": ["mother", "retired_mother", "child", "successor"] },
+          "state": {
+            "enum": ["partial", "registered", "web_session", "keyed", "successor_eligible"]
+          },
+          "promotion_code": { "type": "string" },
+          "invited_by": { "type": "string", "description": "母号 email；首段无" },
+          "rewarded_as_invitee_at": { "type": "string" },
+          "api_key_ref": {
+            "type": "string",
+            "pattern": "^flova-profile:[a-z0-9-]+$",
+            "description": "指向 flova CLI profile；明文 token 仅在 ~/.flova/credentials.yaml"
+          },
+          "web_profile_ref": {
+            "type": "string",
+            "description": "VirtualBrowser worker 标识或其会话目录引用，不放 cookie"
+          },
+          "mailbox_ref": { "type": "string", "description": "邮箱池 key" },
+          "balance_total": { "type": "number" },
+          "last_verified": { "type": "string" },
+          "notes": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    }
+  }
+}

@@ -37,8 +37,21 @@ export const LocationLabel: React.FC<{ loc: LocationInfo; st: StyleTokens; cy?: 
     color: st.text,
     textShadow: "0 4px 18px rgba(0,0,0,.35)",
   };
+  const scrimK = seg(f, 0, 10);
   return (
     <div style={{ position: "absolute", left: 0, top: 0, width: W, height: 1080 }}>
+      <div
+        style={{
+          position: "absolute",
+          left: W / 2 - 620,
+          top: cy - size * 0.95,
+          width: 1240,
+          height: size * 1.9,
+          borderRadius: size,
+          background: "radial-gradient(closest-side, rgba(10,12,16,.26), rgba(10,12,16,0))",
+          opacity: scrimK,
+        }}
+      />
       <div style={{ ...braceStyle, left: W / 2 - half - braceSize * 0.3 }}>{"{"}</div>
       <div style={{ ...braceStyle, left: W / 2 + half - braceSize * 0.18 }}>{"}"}</div>
       <div style={{ position: "absolute", left: (W - textW) / 2, top: cy - size * 0.56, width: textW, display: "flex" }}>

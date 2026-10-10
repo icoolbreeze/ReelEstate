@@ -1,0 +1,35 @@
+# Voice clone TTS (Fun-CosyVoice3) — for agents
+
+Used for narration that has no on-camera presenter (the HeyGen avatar's free tier only covers ~60 s on camera).
+The reference voice is the user's own HeyGen-generated sample (they consent to cloning it). Never use the raw HeyGen training recording.
+
+## One-time setup (Windows, GTX 1070 Ti 8 GB)
+    powershell -ExecutionPolicy Bypass -File scripts\voice\setup_cosyvoice.ps1
+Installs into `vendor/cosyvoice/` (gitignored): CosyVoice repo, .venv (py3.10, torch 2.8 cu126), and the
+Fun-CosyVoice3-0.5B-2512 weights (~9 GB). Pascal GPUs have no bf16, so it runs in fp32 by default (`--fp16` is optional).
+
+## Reference
+- `voices/clone/reference.wav`: 9.5 s clean clip, 24 kHz mono, -16 LUFS
+- `voices/clone/reference.txt`: its exact transcript (must match the audio)
+
+## Model path
+Default: `vendor/cosyvoice/pretrained_models/Fun-CosyVoice3-0.5B` (full fp32 weights, downloaded 2026-10-09).
+Override with the env var `COSYVOICE_MODEL_DIR`.
+
+## Use
+    scripts\voice\clone_tts.cmd projects\<ep>\narration.json [--out DIR] [--fp16]
+narration.json:
+    {"ref_wav": "voices/clone/reference.wav", "ref_text": "voices/clone/reference.txt",
+     "out": "projects/<ep>/tts",
+     "lines": [{"id": "s01", "text": "四千八一个月，西湖文化广场能租到什么样的两室？"}, ...]}
+Output: `<out>/<id>.wav` (24 kHz) plus `timings.json`.
+
+## Rules
+- Write one line per sentence and spell out numbers the way they should be read (五百七十一米).
+- Afterwards, loudnorm to -16 LUFS (`ffmpeg -af loudnorm=I=-16:TP=-1.5`) and check the text with Whisper. Watch homophones such as 两室 → 粮食; use 两居室 if it is misread.
+- Label the video 「AI合成声音」 wherever the clone is used.
+
+## Status / finishing the install
+See `docs/TASK-voice-clone.md` (step-by-step instructions for the local agent).
+Newest CosyVoice as of 2026-10: Fun-CosyVoice3-0.5B-2512 (released 2025-12-11). Nothing newer is official.
+Its README table reports zh CER 1.21% / SIM 78.0 (RL variant: 0.81% / 77.4). Inference needs about 4-6 GB VRAM (fp32), which fits 8 GB.

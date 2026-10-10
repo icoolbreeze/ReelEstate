@@ -1,0 +1,32 @@
+# Shared presenter profile (rarely changes). Episodes reference it by name: episode.yaml `presenter: cool-breeze`.
+# Media under media/ is gitignored. All reference recordings are READ-ONLY for agents.
+name: cool-breeze
+display_name: Cool Breeze
+heygen:
+  avatar: Cool Breeze            # the user's own HeyGen avatar — never use stock avatars
+  look: default                  # HeyGen look/outfit name if several exist
+  orientation: landscape         # 16:9; template centre-crops to 4:3
+  resolution: 720p               # free plan
+  background: plain              # plain backdrop helps matting
+  audio_source: upload           # always upload our cloned audio; never HeyGen TTS
+  plan_limit_s: 60
+  oncam_budget_s: 55
+voice:
+  engine: f5                     # f5 (default) | cosyvoice (rejected as flat)
+  ref_wav: voices/clone/reference.wav     # read-only
+  ref_text: voices/clone/reference.txt    # read-only
+  seed: 22                       # reroll order on Whisper failure: 33, 44
+  speed_oncam: 1.05
+  speed_vo: 1.0
+  style: 影视飓风口播 — short clauses, commas for breaths, emphasis words; same facts
+  lufs: -16
+  whisper_min_sim: 0.85
+muse:
+  avatar_ref_image: assets/presenter/cool-breeze/media/muse_ref.jpg   # put the user's approved still here (fallback avatar only)
+matting:
+  tool: scripts/matting/matte_local.cmd   # MatAnyone2 default on GTX 1070 Ti, auto-fallback to RVM; Kaggle later backup docs/kaggle-gpu.md
+  engine: matanyone2
+  max_size: 720            # MatAnyone2: downsample when the short side exceeds
+  model: resnet50          # RVM backup settings
+  downsample: 0.4          # RVM backup settings
+  output: <ep>/footage/heygen/HG00_alpha.webm

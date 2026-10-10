@@ -523,7 +523,8 @@ def check_map_shots(p: dict, r: Report, project_dir: Path) -> None:
     elif geo and geo.get("live_status") != "ok" and "示意图" not in attr:
         bad(sec, "底图是示意图：署名必须含“示意图 / 示意底图 / © 高德地图”")
     if (geo.get("repaint") or {}).get("status") == "pending":
-        bad(sec, "flova 地图底图重绘未完成（map/flova_request.json 待办）：用 generate_image（gpt-image-2.5 系列，profile kid4，original:true，"
+        bad(sec, "flova 地图底图重绘未完成（map/flova_request.json 待办）：按 map/flova_request.json 用 generate_image（gpt-image-2.5 系列，"
+                 "profile 以 request 的 params.profile 为准（当前活跃母号；request 已写 profile 时沿用，不换号），original:true，"
                  "参考图 map/static.png）重绘并保存 map/base_ai.png 后重跑 map:fetch；不要生成视频")
     req_p = project_dir / "map" / "flova_request.json"
     if req_p.exists() and not _video_allowed(project_dir):

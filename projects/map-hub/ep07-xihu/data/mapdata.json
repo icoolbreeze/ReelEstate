@@ -1,0 +1,183 @@
+{
+ "source": "Amap Web Service (walking/driving/transit route + POI search), fetched for map-demo; comp = 1440x1080 plane of the z15 static map centred 120.1665,30.2745",
+ "listing": {
+  "name": "本房源",
+  "lnglat": [
+   120.167637,
+   30.276067
+  ],
+  "xy": [
+   794.51,
+   421.88
+  ]
+ },
+ "route": [
+  [
+   803.4,
+   421.8
+  ],
+  [
+   803.4,
+   415.6
+  ],
+  [
+   802.0,
+   412.0
+  ],
+  [
+   801.7,
+   412.0
+  ],
+  [
+   811.2,
+   400.2
+  ],
+  [
+   778.1,
+   399.3
+  ],
+  [
+   767.9,
+   399.3
+  ],
+  [
+   761.9,
+   397.6
+  ],
+  [
+   727.2,
+   397.6
+  ],
+  [
+   711.0,
+   397.9
+  ],
+  [
+   690.8,
+   398.6
+  ],
+  [
+   690.5,
+   398.9
+  ],
+  [
+   679.2,
+   307.7
+  ],
+  [
+   676.9,
+   282.8
+  ],
+  [
+   674.1,
+   252.4
+  ],
+  [
+   674.1,
+   250.7
+  ],
+  [
+   672.9,
+   234.7
+  ],
+  [
+   670.9,
+   182.3
+  ],
+  [
+   670.1,
+   158.8
+  ],
+  [
+   669.8,
+   158.8
+  ],
+  [
+   663.8,
+   158.8
+  ]
+ ],
+ "route_m": 571,
+ "pois": [
+  {
+   "id": "metro",
+   "name": "西湖文化广场站",
+   "sub": "地铁1/3/19号线",
+   "kind": "metro",
+   "lnglat": [
+    120.165639,
+    30.279585
+   ],
+   "xy": [
+    663.57,
+    156.71
+   ],
+   "walk_m": 571,
+   "walk_min": 8,
+   "drive_min": 2,
+   "taxi_yuan": 11.0,
+   "transit_min": 14,
+   "transit_yuan": 2.0
+  },
+  {
+   "id": "school",
+   "name": "杭州长江实验小学",
+   "sub": null,
+   "kind": "school",
+   "lnglat": [
+    120.168238,
+    30.278026
+   ],
+   "xy": [
+    833.9,
+    274.22
+   ],
+   "walk_m": 340,
+   "walk_min": 5,
+   "drive_min": 3,
+   "taxi_yuan": 11.0,
+   "transit_min": null,
+   "transit_yuan": null
+  },
+  {
+   "id": "science",
+   "name": "浙江省科技馆",
+   "sub": null,
+   "kind": "museum",
+   "lnglat": [
+    120.164936,
+    30.276404
+   ],
+   "xy": [
+    617.5,
+    396.48
+   ],
+   "walk_m": 291,
+   "walk_min": 4,
+   "drive_min": 2,
+   "taxi_yuan": 11.0,
+   "transit_min": null,
+   "transit_yuan": null
+  },
+  {
+   "id": "mall",
+   "name": "杭州大厦",
+   "sub": null,
+   "kind": "mall",
+   "lnglat": [
+    120.160756,
+    30.274286
+   ],
+   "xy": [
+    343.56,
+    556.13
+   ],
+   "walk_m": 999,
+   "walk_min": 13,
+   "drive_min": 3,
+   "taxi_yuan": 11.0,
+   "transit_min": 18,
+   "transit_yuan": 2.0
+  }
+ ]
+}

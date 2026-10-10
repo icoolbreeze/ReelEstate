@@ -1,0 +1,42 @@
+{
+  "_comment": "本仓库的 Flova 积分策略副本。邀请/注册脚本与 GrokVG 相同（scripts/flova/），无固定保底：按单次报价 B 实时选号，先烧临期邀请分，再 best-fit 子号，全池付不起才邀新。运行时优先读工具返回的 stats；平台调整后改这里。",
+  "mother": {
+    "default_profile": "prod"
+  },
+  "dispatch": {
+    "pad_credits": 3,
+    "min_credit_to_dispatch": 10,
+    "signup_liquid_credits": 100,
+    "rules": [
+      "pinned",
+      "first_image_bonus",
+      "expiring_invite_credits",
+      "child_best_fit",
+      "mother_fallback",
+      "invite_if_entire_pool_cannot_pay"
+    ]
+  },
+  "invite": {
+    "reward_credit_source": "stats.data.registration_reward.credit_reward_num",
+    "max_invitees_source": "stats.data.registration_reward.max_invitees",
+    "rewarded_count_source": "stats.data.registration_reward.rewarded_count",
+    "promotion_code_source": "stats.data.promotion_code",
+    "reward_validity_days": 7,
+    "parallel": true,
+    "gap_sec": 0
+  },
+  "account": {
+    "signup_credits_note": "注册积分以注册当时实际到账为准；营销 300 中立即可用约 signup_liquid_credits，其余靠探索动作解锁",
+    "exploration_one_time": true,
+    "min_keep_credits": 25,
+    "zero_means_banned": true
+  },
+  "successor": {
+    "start_culturing_when_rewarded_reaches": 13,
+    "max_invitees_minus": 7,
+    "required_account_age_days": 7,
+    "required_export": true,
+    "signals_source": "stats.data.eligibility",
+    "rotate_when": "no_invitable_mother_can_cover_budget"
+  }
+}
