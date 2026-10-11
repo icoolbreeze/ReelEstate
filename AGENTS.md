@@ -55,7 +55,7 @@ voices/clone/         # 克隆参考音频（私有，gitignore）
 vendor/qwentts.cpp    # git 子模块（不要随意改动）
 scripts/build-tts.cmd # 编译 qwen-tts.exe（CUDA, sm_61）
 docs/                 # crm.md, tts.md, new-project.md, kaggle-gpu.md
-scripts/kaggle/       # Kaggle GPU 外包：push_job.py / pull_job.py / kernels/
+scripts/kaggle/       # Kaggle GPU 外包：push_job.py / pull_job.py / kernels/（matting_rvm, tts_f5, seedvr2_v9）
 ```
 
 ### 项目文件夹约定
@@ -187,6 +187,7 @@ npm run make -- "<一句话>" [--style mediastorm] [--ratio 4x3] [--voice edge|q
 | `npm run setup` | 安装 remotion/ 依赖 |
 | `npm run typecheck` | `tsc --noEmit` |
 | `scripts\build-tts.cmd` | 编译 qwen-tts.exe（只有用户要求时才运行） |
+| `python scripts/kaggle/push_job.py --episode <dir> --job upscale --kernel seedvr2_v9 --inputs <mp4>` | 视频超分只用这个入口（V9，1280×720@24 → 1920×1080）。可同时两个后台会话；每条片单独 run，输出在 `kaggle/upscale/<run>/output/` |
 
 ## 5. 硬性禁止
 
@@ -218,7 +219,7 @@ npm run make -- "<一句话>" [--style mediastorm] [--ratio 4x3] [--voice edge|q
 - `rules/flova-register.md` — 子号注册与激活（实现是 `scripts/flova/`；账本字段见 `config/flova-registry-schema.json`）
 - `rules/reference/` — 原始调研（含全部来源链接）
 - `docs/tts.md`、`docs/new-project.md`
-- `docs/kaggle-gpu.md` — Kaggle 免费 GPU 外包（抠像、声音克隆；Remotion 渲染不上 Kaggle；每期独立数据集）；grok 操作清单 `docs/TASK-kaggle.md`
+- `docs/kaggle-gpu.md` — Kaggle 免费 GPU 外包（抠像、声音克隆、视频超分 `seedvr2_v9`；Remotion 渲染不上 Kaggle；每期独立数据集）；grok 操作清单 `docs/TASK-kaggle.md`
 - `docs/matting.md` — 人像抠像，本地首选（`scripts/matting/matte_local.cmd` 默认 MatAnyone2，失败自动回退 RobustVideoMatting），Kaggle 为后备
 
 ## 7. 编码约定

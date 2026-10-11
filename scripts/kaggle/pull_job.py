@@ -4,20 +4,21 @@ python scripts/kaggle/pull_job.py --episode projects/rental/<ep> --job matting [
 """
 import argparse, json, sys, time
 from pathlib import Path
-from _common import run, episode_dir, job_dir
+from _common import run, episode_dir, resolve_job_dir
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--episode", required=True)
     ap.add_argument("--job", required=True)
+    ap.add_argument("--run", help="which isolated run to download; required when several exist")
     ap.add_argument("--interval", type=int, default=60)
     ap.add_argument("--timeout", type=int, default=3 * 3600)
     ap.add_argument("--no-wait", action="store_true", help="print status once and exit")
     a = ap.parse_args()
 
     ep = episode_dir(a.episode)
-    jd = job_dir(ep, a.job)
+    jd = resolve_job_dir(ep, a.job, a.run)
     jf = jd / "job.json"
     if not jf.is_file():
         sys.exit(f"no job.json at {jf}; run push_job.py first")

@@ -3,10 +3,15 @@
 python scripts/kaggle/push_job.py --check
 python scripts/kaggle/push_job.py --episode projects/rental/<ep> --job matting \
     --kernel matting_rvm --inputs a.mp4 b.mp4 [--param k=v ...] [--dry-run]
+
+One video input gets its own --run (from the filename) so a second video
+uses another dataset, kernel, and local directory. A run whose kernel is
+still queued or running is not pushed again.
 """
-import argparse, datetime, json, shutil, sys, tempfile, time
+import argparse, datetime, json, os, shutil, sys, tempfile, time
 from pathlib import Path
-from _common import REPO, cred_status, username, run, episode_dir, slug, job_dir, kaggle_exe
+from _common import (REPO, cred_status, username, run, episode_dir, slug,
+                     job_dir, kaggle_exe, run_token, sanitize_run)
 
 KERNELS = Path(__file__).resolve().parent / "kernels"
 
@@ -16,11 +21,12 @@ def main():
     ap.add_argument("--check", action="store_true", help="check CLI + credentials, then exit")
     ap.add_argument("--episode")
     ap.add_argument("--job")
-    ap.add_argument("--kernel", help="template name in kernels/ (matting_rvm, tts_f5)")
+    ap.add_argument("--kernel", help="template name in kernels/ (matting_rvm, tts_f5, seedvr2_v9)")
     ap.add_argument("--inputs", nargs="+", default=[])
     ap.add_argument("--param", action="append", default=[], help="k=v passed to kernel via job.json")
     ap.add_argument("--user")
     ap.add_argument("--accelerator", default="NvidiaTeslaT4")
+    ap.add_argument("--run", help="isolate this session from other runs of the same job")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
 
@@ -39,7 +45,6 @@ def main():
         sys.exit(f"unknown kernel template: {tpl}")
 
     ep = episode_dir(a.episode)
-    s = slug(ep.name, a.job)
     user = username(a.user) if not a.dry_run else (a.user or "<user>")
     params = dict(p.split("=", 1) for p in a.param)
 
@@ -54,23 +59,107 @@ def main():
         if p.name in ("kaggle.json", "access_token") or p.suffix in (".env",):
             sys.exit("refusing to upload credential-like file")
         files.append(p)
+    names = [p.name for p in files]
+    if len(names) != len(set(names)):
+        sys.exit("inputs share a filename; refuse to pack one over the other")
 
-    job = {"slug": s, "episode": ep.name, "job": a.job, "kernel": a.kernel,
-           "inputs": [p.name for p in files], "params": params,
+    if a.run:
+        token = sanitize_run(a.run)
+    elif len(files) == 1:
+        token = run_token(_input_label(ep, files[0]))
+    else:
+        token = None
+    s = slug(ep.name, a.job, token)
+    jd = job_dir(ep, a.job, token, mkdir=not a.dry_run)
+
+    job = {"slug": s, "episode": ep.name, "job": a.job, "run": token,
+           "kernel": a.kernel, "inputs": names, "params": params,
+           "output_dir": (jd / "output").relative_to(ep).as_posix(),
            "pushed_at": datetime.datetime.now().isoformat(timespec="seconds")}
     print(json.dumps(job, ensure_ascii=False, indent=2))
     if a.dry_run:
         print("dry-run: nothing uploaded")
         return
 
+    lock = _acquire_lock(jd / ".push.lock")
+    try:
+        _refuse_if_busy(jd / "job.json")
+        _upload_and_record(a, ep, user, s, files, job, jd, tpl)
+    finally:
+        _release_lock(lock)
+
+def _pid_alive(pid):
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def _acquire_lock(path):
+    """One local push per run directory. A live lock means do not touch that run."""
+    for _ in range(2):
+        try:
+            fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            holder = 0
+            try:
+                holder = int(path.read_text(encoding="utf-8").strip() or "0")
+            except (OSError, ValueError):
+                holder = 0
+            if _pid_alive(holder):
+                sys.exit(f"push already in progress for {path.parent}; not overwriting it")
+            try:
+                path.unlink()
+            except OSError:
+                sys.exit(f"cannot clear stale lock {path}")
+            continue
+        os.write(fd, str(os.getpid()).encode("ascii"))
+        os.close(fd)
+        return path
+    sys.exit(f"cannot lock {path}")
+
+
+def _release_lock(path):
+    try:
+        if path.is_file() and path.read_text(encoding="utf-8").strip() == str(os.getpid()):
+            path.unlink()
+    except OSError:
+        pass
+
+
+def _refuse_if_busy(job_file):
+    if not job_file.is_file():
+        return
+    ref = json.loads(job_file.read_text(encoding="utf-8")).get("ref")
+    if not ref:
+        return
+    st = run(["kernels", "status", ref], check=False)
+    low = st.stdout.lower()
+    if "running" in low or "queued" in low:
+        sys.exit(f"{ref} is still queued or running; not pushing over it and not touching its output")
+
+
+def _input_label(ep, path):
+    try:
+        return path.relative_to(ep).as_posix()
+    except ValueError:
+        return path.relative_to(REPO).as_posix()
+
+
+def _upload_and_record(a, ep, user, s, files, job, jd, tpl):
     ref = f"{user}/{s}"
     with tempfile.TemporaryDirectory() as tmp:
         dd = Path(tmp, "data"); dd.mkdir()
         for p in files:
             shutil.copy2(p, dd / p.name)
-        (dd / "job.json").write_text(json.dumps(job, ensure_ascii=False, indent=2), encoding="utf-8")
+        (dd / "job.json").write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n",
+                                     encoding="utf-8", newline="\n")
         (dd / "dataset-metadata.json").write_text(json.dumps(
-            {"title": s, "id": ref, "licenses": [{"name": "other"}], "isPrivate": True}), encoding="utf-8")
+            {"title": s, "id": ref, "licenses": [{"name": "other"}], "isPrivate": True}) + "\n",
+            encoding="utf-8", newline="\n")
         exists = run(["datasets", "status", ref], check=False).returncode == 0
         if exists:
             run(["datasets", "version", "-p", str(dd), "-m", job["pushed_at"], "-r", "zip", "-q"])
@@ -91,7 +180,8 @@ def main():
             "id": ref, "title": s, "code_file": "main.py", "language": "python",
             "kernel_type": "script", "is_private": True, "enable_gpu": True,
             "enable_internet": True, "dataset_sources": [ref],
-            "competition_sources": [], "kernel_sources": []}), encoding="utf-8")
+            "competition_sources": [], "kernel_sources": []}) + "\n",
+            encoding="utf-8", newline="\n")
         r = run(["kernels", "push", "-p", str(kd), "--accelerator", a.accelerator], check=False)
         if r.returncode != 0 and "accelerator" in (r.stderr + r.stdout).lower():
             r = run(["kernels", "push", "-p", str(kd)])  # older CLI without --accelerator
@@ -100,8 +190,12 @@ def main():
         print(r.stdout.strip())
 
     job["ref"] = ref
-    (job_dir(ep, a.job) / "job.json").write_text(json.dumps(job, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"next: python scripts/kaggle/pull_job.py --episode {a.episode} --job {a.job}")
+    (jd / "job.json").write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n",
+                                 encoding="utf-8", newline="\n")
+    pull = f"python scripts/kaggle/pull_job.py --episode {a.episode} --job {a.job}"
+    if job.get("run"):
+        pull += f" --run {job['run']}"
+    print("next:", pull)
 
 
 if __name__ == "__main__":
