@@ -16,10 +16,29 @@ def kaggle_exe():
     sys.exit("kaggle CLI not found; install with: pip install --user kaggle")
 
 
+def _kaggle_home():
+    return Path(os.environ.get("KAGGLE_CONFIG_DIR") or Path.home() / ".kaggle")
+
+
+def _username_in(path):
+    """Read only the username field. Never return or log the rest of the file."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    user = data.get("username") if isinstance(data, dict) else None
+    if isinstance(user, str) and user.strip():
+        return user.strip()
+    return None
+
+
 def cred_status():
-    home = Path(os.environ.get("KAGGLE_CONFIG_DIR") or Path.home() / ".kaggle")
+    home = _kaggle_home()
     if (home / "kaggle.json").is_file():
         return "kaggle.json"
+    cred = home / "credentials.json"
+    if cred.is_file() and _username_in(cred):
+        return "credentials.json"
     if (home / "access_token").is_file() or os.environ.get("KAGGLE_API_TOKEN"):
         return "access_token"
     if os.environ.get("KAGGLE_USERNAME") and os.environ.get("KAGGLE_KEY"):
@@ -32,10 +51,11 @@ def username(cli_user=None):
         return cli_user
     if os.environ.get("KAGGLE_USERNAME"):
         return os.environ["KAGGLE_USERNAME"]
-    home = Path(os.environ.get("KAGGLE_CONFIG_DIR") or Path.home() / ".kaggle")
-    f = home / "kaggle.json"
-    if f.is_file():
-        return json.loads(f.read_text(encoding="utf-8"))["username"]  # only this field is read
+    home = _kaggle_home()
+    for name in ("kaggle.json", "credentials.json"):
+        user = _username_in(home / name) if (home / name).is_file() else None
+        if user:
+            return user
     sys.exit("Cannot determine Kaggle username; pass --user")
 
 

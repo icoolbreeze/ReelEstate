@@ -83,6 +83,7 @@ desktop.ini
 /templates/map-hub/shared/public/fonts/
 !/projects/map-hub/
 /projects/map-hub/*
+!/projects/map-hub/README.md
 !/projects/map-hub/ep07-xihu/
 /projects/map-hub/ep07-xihu/*
 !/projects/map-hub/ep07-xihu/README.md
@@ -107,3 +108,5 @@ desktop.ini
 /.wav
 /flova-images/
 *.bak
+
+jobs/agent/

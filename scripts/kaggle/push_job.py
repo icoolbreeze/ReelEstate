@@ -21,7 +21,7 @@ def main():
     ap.add_argument("--check", action="store_true", help="check CLI + credentials, then exit")
     ap.add_argument("--episode")
     ap.add_argument("--job")
-    ap.add_argument("--kernel", help="template name in kernels/ (matting_rvm, tts_f5, seedvr2_v9)")
+    ap.add_argument("--kernel", help="template name in kernels/ (matting_rvm, tts_indextts25, tts_f5, seedvr2_v9)")
     ap.add_argument("--inputs", nargs="+", default=[])
     ap.add_argument("--param", action="append", default=[], help="k=v passed to kernel via job.json")
     ap.add_argument("--user")
@@ -149,8 +149,26 @@ def _input_label(ep, path):
         return path.relative_to(REPO).as_posix()
 
 
+# Same pinned image as the account's T4 kernels that leave the queue immediately.
+# A new kernel with an empty docker_image stayed queued and was cancelled at 0 seconds.
+T4_DOCKER_IMAGE = (
+    "gcr.io/kaggle-private-byod/python@sha256:"
+    "2757e0c7d1e0a9cb43da657b97e223c321a98f5014bdf64f44f2f6b083ad2b2f"
+)
+
+
+def _kernel_slug(dataset_slug):
+    """Kernel title/slug must not reuse the dataset slug. Kaggle returns 409."""
+    suffix = "-k"
+    if len(dataset_slug) + len(suffix) <= 50:
+        return dataset_slug + suffix
+    return dataset_slug[:50 - len(suffix)].rstrip("-") + suffix
+
+
 def _upload_and_record(a, ep, user, s, files, job, jd, tpl):
     ref = f"{user}/{s}"
+    kernel_slug = _kernel_slug(s)
+    kernel_ref = f"{user}/{kernel_slug}"
     with tempfile.TemporaryDirectory() as tmp:
         dd = Path(tmp, "data"); dd.mkdir()
         for p in files:
@@ -176,12 +194,16 @@ def _upload_and_record(a, ep, user, s, files, job, jd, tpl):
 
         kd = Path(tmp, "kernel"); kd.mkdir()
         shutil.copy2(tpl, kd / "main.py")
-        (kd / "kernel-metadata.json").write_text(json.dumps({
-            "id": ref, "title": s, "code_file": "main.py", "language": "python",
+        meta = {
+            "id": kernel_ref, "title": kernel_slug, "code_file": "main.py", "language": "python",
             "kernel_type": "script", "is_private": True, "enable_gpu": True,
             "enable_internet": True, "dataset_sources": [ref],
-            "competition_sources": [], "kernel_sources": []}) + "\n",
-            encoding="utf-8", newline="\n")
+            "competition_sources": [], "kernel_sources": [],
+        }
+        if a.accelerator == "NvidiaTeslaT4":
+            meta["docker_image"] = T4_DOCKER_IMAGE
+        (kd / "kernel-metadata.json").write_text(
+            json.dumps(meta) + "\n", encoding="utf-8", newline="\n")
         r = run(["kernels", "push", "-p", str(kd), "--accelerator", a.accelerator], check=False)
         if r.returncode != 0 and "accelerator" in (r.stderr + r.stdout).lower():
             r = run(["kernels", "push", "-p", str(kd)])  # older CLI without --accelerator
@@ -189,7 +211,7 @@ def _upload_and_record(a, ep, user, s, files, job, jd, tpl):
             sys.exit(f"kernel push failed:\n{r.stdout}\n{r.stderr}")
         print(r.stdout.strip())
 
-    job["ref"] = ref
+    job["ref"] = kernel_ref
     (jd / "job.json").write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n",
                                  encoding="utf-8", newline="\n")
     pull = f"python scripts/kaggle/pull_job.py --episode {a.episode} --job {a.job}"

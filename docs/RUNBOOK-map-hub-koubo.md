@@ -5,7 +5,21 @@ Series: @贝壳-TV map-hub 口播. 1440×1080, 30 fps, −16 LUFS. A satellite-s
 (hook full screen, then PiP), cloned voice for everything.
 
 Code: `templates/map-hub/remotion` (Remotion) + `pipeline/maphub/*.py`. Rules: `rules/map-hub/`. Example: `projects/map-hub/ep07-xihu`.
-All commands run from the repo root `C:\Users\shipi\vswp\ReelEstate` in PowerShell. `<EP>` = `projects\map-hub\<epNN-slug>`.
+All commands run from the repo root `C:\Users\shipi\vswp\ReelEstate` in PowerShell. `<EP>` = `projects\map-hub\epNN-<slug>`.
+
+One series, many episodes. Each episode has its own folder. Voice-clone references, the Cool Breeze profile, fonts, and brand logos stay shared and are not copied in.
+
+| | Path |
+|---|---|
+| This episode's footage, voice wavs, HeyGen export, matte, map, script, output | `projects/map-hub/<ep>/` |
+| Folder name | `ep08-xihu`, `ep12-xihu`, `ep10-yuedu`. Category and layout stay in `episode.yaml` |
+| CRM listing id | `<ep>/episode.yaml` `listing.ref` and `<ep>/data/listing_ref.json` only |
+| Chinese community name | `episode.yaml` `listing.community` |
+| Voice reference | `assets/presenter/cool-breeze/voice/ref_phone_v1.wav` + `ref_phone_v1.txt` (default, also the IndexTTS emotion ref). Fallback: `voices/clone/reference.wav` + `reference.txt` (old HeyGen, read-only) |
+| Presenter | `assets/presenter/cool-breeze/presenter.yaml` |
+| Fonts and brands | `templates/map-hub/shared/public/{fonts,brands}` |
+
+Categories: `rental` 租赁, `resale` 二手房, `new-home` 新房, `knowledge` 房源知识与市场分析. The user does not create folders. They give a listing id, or a new-home 楼盘 name, and the agent runs section 0. Rental and resale store that id. New-home has no listing id. Knowledge uses a topic. `ep07-xihu` keeps its original folder name. The cloud listing API currently answers rental only.
 
 ## Hard rules (stop and ask the user if a step would break one)
 - Only the user's own HeyGen avatar ("Cool Breeze") and the user's own cloned voice. Never upload, edit, move or delete the
@@ -24,12 +38,13 @@ All commands run from the repo root `C:\Users\shipi\vswp\ReelEstate` in PowerShe
 - Fonts/brands: `templates/map-hub/shared/public/` (shared, linked by stage.py).
 
 ## 0. New episode (fixed workflow)
-    scripts\new_episode.cmd --id ep08-xxx --category rental --listing <beike id/url> [--footage <dir>]
-Creates `<EP>/episode.yaml` (single source of truth), `episode.json`, `footage/raw/`, README. Footage rules: docs/FOOTAGE-SPEC.md.
-Then say `做视频 ep08-xxx` to grok, or `scripts\make-video.cmd ep08-xxx [stage]` (detached, resumable, logs in `<EP>/jobs/`).
-Manual equivalent:
-    mkdir <EP>; copy projects\map-hub\ep07-xihu\episode.json <EP>\   (then edit)
-    python pipeline\maphub\stage.py <EP>
+    scripts\new_episode.cmd --category rental --slug xihu --listing <id> --title 小区名 [--footage <dir>]
+    scripts\new_episode.cmd --category new-home --slug xipai --title 楼盘名
+    scripts\new_episode.cmd --category knowledge --slug yuedu --topic 选题
+The agent picks the next episode number when `--episode` is omitted. Creates `<EP>/episode.yaml`, `episode.json` (sample numbers cleared), `footage/raw/`, `consent/`, plus `data/listing_ref.json` (rental/resale), `data/project.json` (new-home, no listing id), or `data/topic.json`. Footage rules: docs/FOOTAGE-SPEC.md.
+A listing id never goes in the folder name or in `episode.json`. New-home has no listing id. Stage 1 reads `listing.ref` for rental and fills facts from BeikeMicroservice.
+Then say `做视频 <id>` to grok, or `scripts\make-video.cmd <id> [stage]` (detached, resumable, logs in `<EP>/jobs/`).
+Do not copy `ep07-xihu` by hand. `python pipeline\maphub\stage.py <EP>` links the shared template into this episode.
 Check: `templates\map-hub\remotion\public` and `src\episode` are junctions into `<EP>` (`dir templates\map-hub\remotion` shows <JUNCTION>).
 
 ## 1. Listing data (BeikeMicroservice crm_connector)
@@ -56,13 +71,17 @@ clip, enter (mark id → click), poi[], insert, gap, cam, tts, cap[]}.
 - Spoken compliance: say 示例房源 once; generic B-roll (park/market) → "画面仅作示意".
 Check: `python pipeline\maphub\build_vo.py <EP> --script script_vN.json` (edge-tts estimate) prints total ≈ 90–130 s.
 
-## 4. Voice clone (local)
-Engine/seed/speeds from the presenter profile (default F5-TTS v1 Base, seed 22, 1.05 on-camera / 1.0 VO; CosyVoice rejected as flat). `scripts\voice\clone_tts_f5.cmd`, docs `docs/voice-clone.md`.
-- Write `<EP>/voice/narration.json` {engine:"f5", ref_wav:"voices/clone/reference.wav", ref_text:"voices/clone/reference.txt",
-  out:"<EP>/voice/raw", lines:[{id, text, seed, speed}]}; one entry per hook + line; text = tts with rhythm punctuation.
-- Speed 1.0–1.1, natural pace; no post time-stretch unless the on-camera budget forces it (then atempo ≤ 1.1).
-- For HOOK and on-camera lines generate 2–3 seeds; pick by ear / Whisper score.
-      scripts\voice\clone_tts_f5.cmd <EP>\voice\narration.json
+## 4. Voice clone (IndexTTS-2.5 on one Kaggle T4)
+Engine/seed/speeds from the presenter profile (IndexTTS-2.5, seed 22, 1.05 on-camera / 1.0 VO; CosyVoice rejected as flat). `scripts\voice\push_indextts25.py`, docs `docs/kaggle-gpu.md`. F5 (`scripts\voice\clone_tts_f5.cmd`) only when explicitly requested. edge-tts in section 3 stays the timing estimate.
+- Write `<EP>/voice/narration.json` {engine:"indextts25", ref_wav:"assets/presenter/cool-breeze/voice/ref_phone_v1.wav", ref_text:"assets/presenter/cool-breeze/voice/ref_phone_v1.txt",
+  lines:[{id, text, seed, speed, emo_ref:"ref_phone_v1.wav", emo_alpha:1.0}]}; one entry per hook + line (or 2-3 large sections; whole passages give the most natural prosody);
+- Pauses come from punctuation and line breaks only. Never use `——` (it is read aloud); use `，` or `……`. See docs/voice-style-mediastorm.md.
+  text = tts with rhythm punctuation. Flat `text` only.
+- Speed 1.0–1.1 still means faster when greater than 1. The kernel converts `duration_factor = 1/speed`. No post time-stretch unless the on-camera budget forces it (then atempo ≤ 1.1).
+- For HOOK and on-camera lines generate 2–3 seeds; pick by ear / Whisper score. T4 runs fp32.
+      python scripts\voice\push_indextts25.py --episode <EP> --script <EP>\voice\narration.json
+      python scripts\kaggle\pull_job.py --episode <EP> --job tts --run indextts25
+- Wavs land in `<EP>/kaggle/tts/indextts25/output/out/<id>.wav` (22050 Hz) plus `manifest.json`.
 - Post: trim silence, loudnorm −16 LUFS → `<EP>/voice/final/<id>.wav` (ffmpeg `silenceremove…,loudnorm=I=-16:TP=-1.5:LRA=7`).
 - Whisper check (`pipeline/asr` or the cosyvoice venv's whisper): similarity ≥ 0.85 per line, otherwise re-roll the seed.
       python pipeline\maphub\build_vo.py <EP> --script script_vN.json --voice-dir <EP>\voice\final
@@ -87,13 +106,23 @@ Check the `_preview.mp4`; hand-key `kf` for drifting low-texture targets or drop
 ## 7. HeyGen avatar (Playwright MCP, logged-in HeyGen)
 - Create ONE landscape 16:9 720p video with avatar **Cool Breeze**; audio = upload `<EP>/heygen/heygen_audio.wav`
   (lip-sync to our audio — do NOT type the script, do NOT use HeyGen TTS/voices). Plain background, face centred.
-- Generate once, download MP4 to `<EP>/heygen/export.mp4`.
-      python pipeline\maphub\heygen_plan.py <EP> split <EP>\heygen\export.mp4 [--offset s]
-Check: export duration = plan total ±0.5 s (else set --offset); lips match the first and last segment.
+- Generate once, download MP4 to `<EP>/heygen/export.mp4`. Do not overwrite this file later.
+- **7b. De-watermark + 4:3 (fixed step, before any split or matting).** HeyGen exports 16:9 1280x720 with a HeyGen mark bottom-right; camera, background and presenter position are fixed.
+      python pipeline\maphub\heygen_43.py <EP>            (exits 3 at the flova hand-off)
+      python scripts\flova\mcp_call.py generate_image <EP>\heygen\dewm\flova_request.json
+         (or call flova-image generate_image with that request: gpt-image-2.5-sunburst, 4:3, 2K, original=true, profile kid4, reference = heygen/dewm/canvas.png)
+      copy the returned PNG to <EP>\heygen\dewm\plate_43.png
+      python pipeline\maphub\heygen_43.py <EP> --qa
+  What it does: full-length matte of export.mp4 (scripts/matting, MatAnyone2 -> RVM fallback) -> clean background plate (per-pixel median where the presenter is absent) -> canvas with the plate at the bottom 1440x810 -> flova removes the HeyGen text and outpaints 270 px upward -> plate aligned back with ECC (fit rejected if it drifts) -> presenter (x1.125) composited over it; HeyGen mark pixels on the presenter are Telea-inpainted per frame -> `heygen/export_43.mp4` (1440x1080, original audio).
+  Check: `heygen/dewm/qa/before_after.png` shows no HeyGen text and no seam at y=270; `align.json` near identity with ty ~ 270; `composite.json` frames = export frames; duration = export.mp4. Cost ~12 flova credits per episode. Resumable: delete `export_43.mp4` (or pass --force) to rebuild.
+  Split then uses `export_43.mp4` automatically. (Legacy `heygen_mark.py` / `export_nomark.mp4` only when 7b is skipped.)
+      python pipeline\maphub\heygen_plan.py <EP> split [--offset s]
+Check: export duration = plan total ±0.5 s (else set --offset); lips match the first and last segment. Split with no src uses `export_nomark.mp4` when the mark step is done, or `export.mp4` when it reports absent.
 `<EP>/heygen/crop.json` {"HG04": 0.47} to re-centre the 4:3 crop per segment if needed.
 
 ## 8. Matting (hook avatar in front of the list)
     scripts\matting\matte_local.cmd <EP>\footage\heygen\HG00.mp4 --downsample 0.4
+  After 7b, HG segments and HG00_alpha.webm are native 4:3 1440x1080: Remotion places them 1:1, no crop (footage.json w/h from ffprobe via sync_assets). Re-run this matte whenever HG00 is re-split so the alpha matches. Without 7b, 16:9 1280x720 segments are still centre-cropped around heygen/crop.json cx (fallback).
     copy <EP>\matte\HG00_alpha.webm <EP>\footage\heygen\HG00_alpha.webm
 (MatAnyone2 is the local default on the 1070 Ti — same command, same three output files;
 it automatically falls back to RobustVideoMatting if MatAnyone2 is unavailable or fails.
@@ -122,6 +151,15 @@ Look at the contact sheet + stills at: hook, opener end, each click, END panel:
 Report: path, duration, on-camera seconds, LUFS, contact sheet, weaknesses.
 
 ## User taste rules (from ep07 reviews)
+
+### Hook layering (bold, v7; `templates/map-hub/remotion/src/HeygenCut.tsx` HookShot, applies to every episode)
+Back to front: 1 HeyGen plate (native 4:3 after 7b) -> 2 headline -> 3 facts line + photo cards -> 4 presenter alpha (HG00_alpha) -> 5 caption pill -> 6 brand strip (unchanged).
+- Headline: community name, AlimamaShuHeiTi (`TITLE`), ~230 px (`min(260, 1360/chars)`), centred, top 262 so the presenter's head covers part of it. The occlusion is intended: type and cards always sit BEHIND the matted presenter and IN FRONT of the plate.
+- Facts line under the headline, left: rent in the gold accent + layout + area, 54/34 px, tabular-nums.
+- Photo cards (max 2): off-white `#FBFAF7` 12 px border, tinted shadow `rgba(38,32,24,.30)`, tilt -3 / +3.5 deg, label tag (room name) bottom-left; slide in from the sides. They may sit behind the presenter, never in the caption band centre.
+- Motion (video-taste section 7): entries `Easing.bezier(.16,1,.3,1)`, headline per-char rise 12 f with a 2 f stagger, facts 12 f, cards 10 f at f58/f66; headline drift 1.00 -> 1.03 over the hook; <=5 elements entering at once; no overshoot.
+- Caption pill and brand strip stay in front of the presenter and unchanged. Needs HG00_alpha.webm; without it the presenter is not drawn in front (re-run the step 8 matte).
+- QA: stills at f12, f40, f80, f140 plus a 5 s clip (`--frames=0-149`); check the head covers the headline only partly and the name stays readable.
 - Map is the backbone; every section starts and ends on the map. Opener ends on the map with ALL marks already in
   (staggered entrances, collision-avoided labels with leader lines, pins legible at 50 % thumbnail); hub continues with no re-pop.
 - Routes draw only when their POI is narrated. Single plain mouse pointer (no name tag), ≈1.7× size.

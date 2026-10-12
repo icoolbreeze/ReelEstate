@@ -171,7 +171,7 @@ def build_model(model_dir, use_fp16):
 def resolve_items(cfg, base):
     p = lambda x: x if os.path.isabs(x) else (
         os.path.join(base, x) if os.path.exists(os.path.join(base, x)) else os.path.join(ROOT, x))
-    spk_ref = p(cfg.get("spk_ref") or cfg.get("ref_wav") or "voices/clone/reference.wav")
+    spk_ref = p(cfg.get("spk_ref") or cfg.get("ref_wav") or "assets/presenter/cool-breeze/voice/ref_phone_v1.wav")
     items = []
     for i, ln in enumerate(cfg["lines"]):
         if isinstance(ln, str):

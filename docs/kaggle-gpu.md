@@ -9,7 +9,8 @@
 |---|---|---|
 | 人像抠像 RobustVideoMatting（`kernels/matting_rvm.py`） | **Kaggle** | 每段几秒到几十秒，T4 很快 |
 | 精细逐帧抠像 BiRefNet | **Kaggle**（模板待加） | 慢，显存大 |
-| 声音克隆 F5-TTS 批量（`kernels/tts_f5.py`） | **Kaggle** 或本地 1070 Ti | 本地 8 GB 也够；量大时放 Kaggle |
+| 口播克隆 IndexTTS-2.5（`kernels/tts_indextts25.py`） | **Kaggle，一张 T4** | 优先。T4 无 BF16，用 fp32。权重 `IndexTeam/IndexTTS-2.5` |
+| 声音克隆 F5-TTS 批量（`kernels/tts_f5.py`） | **Kaggle** 或本地 1070 Ti | 显式回退。本地 8 GB 也够；量大时放 Kaggle |
 | 视频超分 SeedVR2 V9（`kernels/seedvr2_v9.py`） | **Kaggle** | 一条 1280×720、24fps 的片 → 1920×1080，双 T4。Remotion 渲染不上 Kaggle |
 | 声音克隆 CosyVoice3 | 本地优先（`vendor/cosyvoice/`），需要时可写 Kaggle 模板 | |
 | Remotion 合成 / 渲染 | **本地或 box，不上 Kaggle** | 用不上 GPU；Node、中文字体、素材往返都麻烦 |
@@ -70,6 +71,19 @@ kernel 需要联网（`enable_internet`）以 pip 安装依赖、下载模型权
   也认 `voices/clone/test_script.json` 的 `id`/`text` 字段）。
 - 参数：`--param ref=ref.wav`、`--param script=lines.json`、`--param speed=1.0`、`--param nfe=32`。
 - 输出：`<id>.wav`（24 kHz）+ `manifest.json`。
+- 声音克隆仅限用户本人且有声音授权（`consent/`）。显式回退时才用这个内核。
+
+### tts_indextts25（IndexTTS-2.5，口播优先）
+
+口播克隆优先走这个内核，不用 F5，也不替换 edge-tts 时长估算（`pipeline/maphub/build_vo.py` 不带 `--voice-dir`，以及 `pipeline/make.py` 的 tts 阶段仍是草稿）。
+
+- 推送：`python scripts/voice/push_indextts25.py --episode <ep> --script <ep>/voice/narration.json`
+- 等价命令：`python scripts/kaggle/push_job.py --episode <ep> --job tts --kernel tts_indextts25 --run indextts25 --accelerator NvidiaTeslaT4 --inputs <ref.wav> <narration.json> --param ref=<wav 文件名> --param script=<json 文件名> --param lang=ZH`
+- 下载：`python scripts/kaggle/pull_job.py --episode <ep> --job tts --run indextts25`
+- 成片：`<ep>/kaggle/tts/indextts25/output/out/<id>.wav` 与 `manifest.json`。采样率 22050 Hz。
+- 脚本是扁平的 `lines[].text`。`speed` 大于 1 表示更快，内核换成 IndexTTS 的 `duration_factor = 1/speed`（有效范围 0.5–2.0）。行内直接写 `duration_factor` 时不再做这层换算。
+- 加速器 `NvidiaTeslaT4`，进程只占用一张卡（`CUDA_VISIBLE_DEVICES=0`）。T4 计算能力 7.5，没有 BF16，默认 fp32。`bf16=1` 才强制半精度。
+- 代码钉在 `index-tts` 的 `d9e41aac89fd00b3d71497fddb287b7f24613712`。权重 `IndexTeam/IndexTTS-2.5`。
 - 声音克隆仅限用户本人且有声音授权（`consent/`）。
 
 ### seedvr2_v9（SeedVR2 V9，视频超分）

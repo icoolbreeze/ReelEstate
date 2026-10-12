@@ -1,7 +1,7 @@
 # Footage naming & placement (map-hub 口播)
 
 ## Where
-- `projects/map-hub/<ep>/footage/raw/` — the user's own shot footage. **Read-only** for agents (never edit, move or delete).
+- `projects/map-hub/<ep>/footage/raw/` — the user's own shot footage. **Read-only** for agents (never edit, move or delete). `<ep>` is `epNN-<slug>`, for example `ep08-xihu`. Category, layout, and the CRM listing id are not part of this path.
 - `projects/map-hub/<ep>/footage/<ID>.mp4` — working clips used by the template (Muse output or trimmed copies of raw clips).
 - `projects/map-hub/<ep>/footage/heygen/HG*.mp4` — split HeyGen segments; `HG00_alpha.webm` = matted hook.
 - Muse prompts/manifest: `<ep>/muse_prompts/`. Never put footage in `templates/` or another episode.

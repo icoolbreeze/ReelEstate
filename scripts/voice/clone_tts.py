@@ -1,6 +1,6 @@
 """Voice-clone TTS for ReelEstate (Fun-CosyVoice3 / F5-TTS / IndexTTS2).
 Usage: python scripts\voice\clone_tts.py script.json [--out DIR] [--engine cosyvoice|f5|indextts2] [--fp16]
-script.json: {"engine": "cosyvoice|f5", "ref_wav": "voices/clone/reference.wav",
+script.json: {"engine": "cosyvoice|f5", "ref_wav": "assets/presenter/cool-breeze/voice/ref_phone_v1.wav" (default; fallback voices/clone/reference.wav),
               "ref_text": "voices/clone/reference.txt" (file or literal),
               "lines": [{"id": "s01", "text": "...", "seed"?: int, "speed"?: float}, ...]}
               (lines may also be plain strings)
@@ -12,10 +12,12 @@ ap = argparse.ArgumentParser()
 ap.add_argument("script")
 ap.add_argument("--out")
 ap.add_argument("--fp16", action="store_true")
-ap.add_argument("--engine", choices=["cosyvoice", "f5", "indextts2"], default=None)
+ap.add_argument("--engine", choices=["cosyvoice", "f5", "indextts2", "indextts25"], default=None)
 a = ap.parse_args()
 cfg = json.load(open(a.script, encoding="utf-8"))
-engine = a.engine or cfg.get("engine") or "cosyvoice"
+engine = a.engine or cfg.get("engine") or "indextts25"
+if engine == "indextts25":
+    raise SystemExit("indextts25 (default) runs on Kaggle: python scripts/voice/push_indextts25.py --episode <ep> --script <json>; local F5: --engine f5")
 
 if engine == "indextts2":
     if a.fp16:
@@ -31,8 +33,8 @@ if engine == "indextts2":
 
 base = os.path.dirname(os.path.abspath(a.script))
 p = lambda x: x if os.path.isabs(x) else (os.path.join(base, x) if os.path.exists(os.path.join(base, x)) else os.path.join(ROOT, x))
-ref_wav = p(cfg.get("ref_wav", "voices/clone/reference.wav"))
-rt = cfg.get("ref_text", "voices/clone/reference.txt")
+ref_wav = p(cfg.get("ref_wav", "assets/presenter/cool-breeze/voice/ref_phone_v1.wav"))
+rt = cfg.get("ref_text", "assets/presenter/cool-breeze/voice/ref_phone_v1.txt")
 ref_text = open(p(rt), encoding="utf-8").read().strip() if os.path.exists(p(rt)) else rt
 out = a.out or cfg.get("out") or os.path.join(base, "tts")
 if not os.path.isabs(out): out = os.path.join(ROOT, out)

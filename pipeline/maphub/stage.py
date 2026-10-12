@@ -6,7 +6,7 @@ usage: python pipeline/maphub/stage.py projects/map-hub/<ep>
 Creates (Windows: directory junctions, no admin needed; elsewhere: symlinks):
   templates/map-hub/remotion/public        -> <ep>/public
   templates/map-hub/remotion/src/episode   -> <ep>/data
-  <ep>/public/fonts, <ep>/public/brands    -> templates/map-hub/shared/public/{fonts,brands}
+  <ep>/public/{fonts,brands,social} -> templates/map-hub/shared/public/{fonts,brands,social}
 So every generated file (vo, mix.wav, timeline.json, footage copies, room stills) lands inside the episode folder,
 and the template itself holds code only. Both links are gitignored. Re-run to switch episodes.
 """
@@ -37,7 +37,7 @@ def main():
     for d in ("data", "public", "footage", "annotations", "out", "voice", "heygen"): (ep / d).mkdir(exist_ok=True)
     link(TPL / "public", ep / "public")
     link(TPL / "src/episode", ep / "data")
-    for d in ("fonts", "brands"): link(ep / "public" / d, SHARED / d)
+    for d in ("fonts", "brands", "social"): link(ep / "public" / d, SHARED / d)
     (TPL / ".current-episode").write_text(str(ep), encoding="utf-8")
     print("staged", ep.name)
 

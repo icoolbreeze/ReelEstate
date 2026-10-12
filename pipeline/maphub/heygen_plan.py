@@ -6,7 +6,9 @@ usage:
       -> <episode>/heygen/heygen_audio.wav   (upload to HeyGen as the lip-sync audio; ONE landscape video)
          <episode>/heygen/segments.json      (seg id, line, text, speech + cut points in the HeyGen export)
          <episode>/heygen_segments.md
-  python pipeline/heygen_plan.py episodes/<id> split <heygen_export.mp4>   -> footage/heygen/<seg>.mp4 (muted, 16:9 kept; Remotion crops to 4:3)
+  python pipeline/maphub/heygen_plan.py <episode> split [src.mp4]
+      With no src, uses heygen/export_nomark.mp4 after heygen_mark.py (status done),
+      or heygen/export.mp4 when the mark step reports absent. Refuses to split while the mark step is pending.
   python pipeline/heygen_plan.py episodes/<id> placeholders <P-clip dir>  -> stand-in segments from the Muse P1–P5 clips (16:9 padded)
 
 Layout of the HeyGen audio: LEAD s silence, seg1 speech, GAP s, seg2 speech, ..., TAIL s.
@@ -15,7 +17,7 @@ of mouth-closed handle on both sides. In Remotion a segment starts PAD frames be
 Uses the per-line TTS files (proj/public/episode/vo/<line>.mp3) so timing matches the timeline exactly; when the cloned
 voice replaces the TTS, re-run build_vo.py then this plan step, and give HeyGen the new heygen_audio.wav.
 """
-import argparse, json, subprocess
+import argparse, json, subprocess, sys
 from pathlib import Path
 import numpy as np
 
@@ -58,16 +60,46 @@ def plan(ep, proj):
     md = [f"# HeyGen segments — {ep.name}", "",
           f"ONE landscape 16:9 video, 720p, avatar **Cool Breeze**, audio = upload `heygen/heygen_audio.wav` (lip-sync to our audio; do not type the script).",
           f"Total length **{total:.2f} s** (speech {J['speech']:.2f} s + {GAP}s pauses) — free-plan limit 60 s, our budget {LIMIT:.0f} s.", "",
-          "Framing: keep the face near the horizontal centre — Remotion centre-crops 16:9 → 4:3 (keeps the middle 75 % of the width).", "",
+          "Framing: after runbook 7b (heygen_43.py) segments are native 4:3 1440x1080, no crop. Fallback without 7b: keep the face near the horizontal centre — Remotion centre-crops 16:9 → 4:3 (keeps the middle 75 % of the width).", "",
           "| # | seg | line | layout | text | speech (s in export) | dur | cut in → out | cut dur |", "|---|---|---|---|---|---|---|---|---|"]
     for i, s in enumerate(segs):
         md.append(f"| {i+1} | {s['seg']} | {s['line']} | {s['layout']} | {s['text']} | {s['speech'][0]:.2f}–{s['speech'][1]:.2f} | {s['dur']:.2f} | {s['cut'][0]:.2f} → {s['cut'][1]:.2f} | {s['cutDur']:.2f} |")
-    md += ["", "Split after download:", "", f"    python pipeline/heygen_plan.py {ep.as_posix()} split <path/to/heygen_export.mp4>", "",
+    md += ["", "After download, cover the corner mark on the original, then split:", "",
+           f"    python pipeline/maphub/heygen_mark.py {ep.as_posix()}",
+           "    # exit 3: agent saves heygen/mark/repair.png from heygen/mark/flova_request.json (generate_image), then rerun",
+           f"    python pipeline/maphub/heygen_plan.py {ep.as_posix()} split", "",
            "If HeyGen's export is longer/shorter than the plan (it can add ~0.1–0.5 s at the head), set `--offset <s>` on split (positive = export starts later).",
-           "Then `python pipeline/sync_assets.py " + ep.as_posix() + "` and render."]
+           "Then `python pipeline/maphub/sync_assets.py " + ep.as_posix() + "` and render."]
     (ep / "heygen_segments.md").write_text("\n".join(md) + "\n", encoding="utf-8")
     print(f"{len(segs)} segments, HeyGen video {total:.2f} s (speech {J['speech']:.2f} s) -> {wav}")
     if total > LIMIT: print(f"!! over the {LIMIT:.0f} s budget")
+
+def default_split_src(ep):
+    """Cleaned original after heygen_mark.py. Explicit src on the command line skips this."""
+    four3 = ep / "heygen" / "export_43.mp4"
+    if four3.is_file():   # runbook 7b: heygen_43.py (de-watermarked, outpainted 1440x1080)
+        print("split source", four3, "(4:3, de-watermarked)")
+        return four3
+    status_p = ep / "heygen" / "mark" / "status.json"
+    export, clean = ep / "heygen" / "export.mp4", ep / "heygen" / "export_nomark.mp4"
+    if not status_p.is_file():
+        print(f"run python pipeline/maphub/heygen_mark.py {ep.as_posix()} before split", file=sys.stderr)
+        raise SystemExit(2)
+    status = json.loads(status_p.read_text(encoding="utf-8")).get("status")
+    if status == "done":
+        if not clean.is_file():
+            print(f"mark status is done but {clean} is missing", file=sys.stderr)
+            raise SystemExit(2)
+        print("split source", clean)
+        return clean
+    if status == "absent":
+        if not export.is_file():
+            print(f"missing {export}", file=sys.stderr)
+            raise SystemExit(2)
+        print("split source", export, "(no corner mark)")
+        return export
+    print(f"heygen mark is {status}; finish python pipeline/maphub/heygen_mark.py {ep.as_posix()} before split", file=sys.stderr)
+    raise SystemExit(2)
 
 def split(ep, src, offset, fdir):
     J = json.loads((ep / "heygen/segments.json").read_text(encoding="utf-8")); fdir.mkdir(parents=True, exist_ok=True)
@@ -96,5 +128,5 @@ if __name__ == "__main__":
     if a.cmd == "plan": plan(ep, Path(a.proj))
     fh = Path(a.footage) if a.footage else ep / "footage/heygen"
     if a.cmd == "plan": pass
-    elif a.cmd == "split": split(ep, Path(a.src), a.offset, fh)
+    elif a.cmd == "split": split(ep, Path(a.src) if a.src else default_split_src(ep), a.offset, fh)
     else: placeholders(ep, Path(a.src or (ep / "footage")), fh)

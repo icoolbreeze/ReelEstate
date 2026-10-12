@@ -55,7 +55,7 @@ voices/clone/         # 克隆参考音频（私有，gitignore）
 vendor/qwentts.cpp    # git 子模块（不要随意改动）
 scripts/build-tts.cmd # 编译 qwen-tts.exe（CUDA, sm_61）
 docs/                 # crm.md, tts.md, new-project.md, kaggle-gpu.md
-scripts/kaggle/       # Kaggle GPU 外包：push_job.py / pull_job.py / kernels/（matting_rvm, tts_f5, seedvr2_v9）
+scripts/kaggle/       # Kaggle GPU 外包：push_job.py / pull_job.py / kernels/（matting_rvm, tts_indextts25, tts_f5, seedvr2_v9）
 ```
 
 ### 项目文件夹约定
@@ -187,6 +187,7 @@ npm run make -- "<一句话>" [--style mediastorm] [--ratio 4x3] [--voice edge|q
 | `npm run setup` | 安装 remotion/ 依赖 |
 | `npm run typecheck` | `tsc --noEmit` |
 | `scripts\build-tts.cmd` | 编译 qwen-tts.exe（只有用户要求时才运行） |
+| `python scripts/voice/push_indextts25.py --episode <ep> --script <ep>/voice/narration.json` | 口播克隆优先走这条（Kaggle 一张 T4，IndexTTS-2.5，fp32）。下载：`python scripts/kaggle/pull_job.py --episode <ep> --job tts --run indextts25` |
 | `python scripts/kaggle/push_job.py --episode <dir> --job upscale --kernel seedvr2_v9 --inputs <mp4>` | 视频超分只用这个入口（V9，1280×720@24 → 1920×1080）。可同时两个后台会话；每条片单独 run，输出在 `kaggle/upscale/<run>/output/` |
 
 ## 5. 硬性禁止
@@ -232,8 +233,9 @@ npm run make -- "<一句话>" [--style mediastorm] [--ratio 4x3] [--voice edge|q
 - 提交信息用英文。
 
 ## map-hub 口播 series (@贝壳-TV) — end-to-end runbook
-- **Start here:** `docs/RUNBOOK-map-hub-koubo.md` (listing → POIs → script → F5 voice clone → Muse via Playwright → annotations →
-  HeyGen via Playwright → matting → assemble → QA, plus the user's taste rules).
+- **Start here:** `docs/RUNBOOK-map-hub-koubo.md` (listing → POIs → script → IndexTTS-2.5 voice clone on one Kaggle T4 → Muse via Playwright → annotations →
+  HeyGen via Playwright → heygen_mark → split → matting → assemble → QA, plus the user's taste rules).
+- HeyGen download writes `heygen/export.mp4`. Then `python pipeline/maphub/heygen_mark.py <ep>` covers only the bottom-right mark on that original (one `generate_image` still plus a mask; the face stays sharp and the sofa stays soft). Exit 3 means save `heygen/mark/repair.png` and rerun. Split uses `heygen/export_nomark.mp4` and does not overwrite `export.mp4`.
 - Code: `templates/map-hub/remotion/` (Remotion 4.0.529, comps `MapHubHeygen`, `MapHubKoubo`, `Opener`) + `pipeline/maphub/*.py`.
   Rules: `rules/map-hub/`. Example episode: `projects/map-hub/ep07-xihu/`.
 - Always `python pipeline/maphub/stage.py projects/map-hub/<ep>` first: it links the template's `public/` and `src/episode/`
@@ -242,15 +244,20 @@ npm run make -- "<一句话>" [--style mediastorm] [--ratio 4x3] [--voice edge|q
   `.mcp.json` / `.grok/`; no commit/push unless asked.
 
 ### Trigger: `做视频 <ep>` / `make-video <ep>` (fixed workflow)
-When the user says **做视频 epNN-xxx** (or "make video epNN-xxx"):
-1. If `projects/map-hub/<ep>/episode.yaml` does not exist, ask for category + Beike listing id/url (+ footage folder) and run
-   `python scripts/new_episode.py --id <ep> --category <cat> --listing <id> [--footage <dir>]` — do not improvise a layout.
-2. Read `episode.yaml` (single source of truth) and follow `docs/RUNBOOK-map-hub-koubo.md` stage by stage, starting at the first
-   stage whose `status` is not `done`; update `status` + `jobs/progress.md` after each passing check. Footage rules: `docs/FOOTAGE-SPEC.md`.
-3. Long stages run detached: `scripts\make-video.cmd <ep> [stage]` (logs in `<ep>/jobs/<stage>.log`, resumable).
-New episode skeleton: `scripts\new_episode.cmd --id ep08-xxx --category rental --listing <id/url> [--footage <dir>]`.
+When the user gives a **房源编号** or a **新房楼盘** name (or says **做视频** for an episode that has no folder yet), the agent creates the episode. Do not ask the user to run `new_episode` or to pick the folder name or the episode number.
+1. Next number is one past the highest `projects/map-hub/epNN-*` (ep07 counts). Folder is `epNN-<pinyin>`, for example `ep08-xihu`. Category, layout, and the listing id stay in `episode.yaml`. Do not put them in the folder. Omit `--episode` and the script takes that number.
+2. A listing id is `rental`, unless the user says 二手房 (`resale`). Query the rental BeikeMicroservice detail for the community name, turn it into a pinyin slug, and run
+   `python scripts/new_episode.py --category rental --slug <pinyin> --listing <id> --title <小区名>`.
+   The id stays in `episode.yaml` `listing.ref` and `data/listing_ref.json`. It must not appear in the folder, `episode.json`, narration, or picture.
+3. A 新房楼盘 has no listing id. Run
+   `python scripts/new_episode.py --category new-home --slug <pinyin> --title <楼盘名>`.
+   The name is `listing.community` and `data/project.json`. Do not invent a listing id.
+4. A knowledge or market episode is only when the user asks for one: `--category knowledge --slug <pinyin> --topic <选题>`.
+5. Then read `episode.yaml` and follow `docs/RUNBOOK-map-hub-koubo.md` from the first stage whose `status` is not `done`. Footage rules: `docs/FOOTAGE-SPEC.md`.
+Long stages run detached: `scripts\make-video.cmd <ep> [stage]` (logs in `<ep>/jobs/<stage>.log`, resumable).
+`ep07-xihu` keeps its original folder. Generated wavs stay in the episode; `voices/clone/` is the shared reference.
 
 ### Shared resources (do not copy per episode)
-- Presenter: `assets/presenter/cool-breeze/presenter.yaml` — HeyGen avatar Cool Breeze, voice clone ref + F5 seed/speed, Muse avatar ref, matting.
+- Presenter: `assets/presenter/cool-breeze/presenter.yaml` — HeyGen avatar Cool Breeze, voice clone ref + IndexTTS-2.5 on one Kaggle T4 (seed/speed still from this profile), Muse avatar ref, matting.
   episode.yaml says `presenter: cool-breeze`; optional `presenter_override` per episode. Never edit the profile for one episode.
 - Fonts + brand logos: `templates/map-hub/shared/public/{fonts,brands}` (linked into each episode by stage.py).

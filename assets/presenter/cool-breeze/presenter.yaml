@@ -12,9 +12,12 @@ heygen:
   plan_limit_s: 60
   oncam_budget_s: 55
 voice:
-  engine: f5                     # f5 (default) | cosyvoice (rejected as flat)
-  ref_wav: voices/clone/reference.wav     # read-only
-  ref_text: voices/clone/reference.txt    # read-only
+  engine: indextts25             # Kaggle one T4, kernels/tts_indextts25.py, fp32 on T4. F5 only when --kernel tts_f5 or --engine f5 is explicit. cosyvoice rejected as flat.
+  ref_wav: assets/presenter/cool-breeze/voice/ref_phone_v1.wav    # DEFAULT: user phone recording (approved 2026-10-12)
+  ref_text: assets/presenter/cool-breeze/voice/ref_phone_v1.txt
+  emo_ref_wav: assets/presenter/cool-breeze/voice/ref_phone_v1.wav  # IndexTTS-2.5 emotion ref (emo_ref per line, emo_alpha 1.0)
+  fallback_ref_wav: voices/clone/reference.wav    # old HeyGen My Voice ref, read-only, optional fallback
+  fallback_ref_text: voices/clone/reference.txt
   seed: 22                       # reroll order on Whisper failure: 33, 44
   speed_oncam: 1.05
   speed_vo: 1.0
@@ -30,3 +33,6 @@ matting:
   model: resnet50          # RVM backup settings
   downsample: 0.4          # RVM backup settings
   output: <ep>/footage/heygen/HG00_alpha.webm
+social:                    # top-right badge on every episode (SocialBadge.tsx); episode.yaml `social:` overrides
+  - {platform: wechat-channels, icon: social/wechat-channels.svg, handle: "@贝壳-TV"}   # 微信视频号
+  - {platform: douyin, icon: social/douyin.svg, handle: "@贝壳TV"}                   # 抖音 (no dash)

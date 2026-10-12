@@ -66,7 +66,8 @@ def main():
             footage[cid] = {"kind": "pending", "status": "pending", "label": s["purpose"]}
             anns[cid] = {"space": "frame", "method": "pending (labels only)", "targets": [{"id": f"t{i}", "label": l[0], "sub": l[1], "kf": []} for i, l in enumerate(labels)]}
         footage[cid]["purpose"] = s["purpose"]
-    # HeyGen avatar segments (heygen_plan.py split/placeholders): footage/heygen/<seg>.mp4 -> clip id <seg>; 16:9 is centre-cropped to 4:3 in
+    # HeyGen avatar segments: w/h come from ffprobe, so native 1440x1080 segments from export_43.mp4 (runbook 7b) fill the frame 1:1, no crop.
+# Fallback (no 7b): footage/heygen/<seg>.mp4 -> clip id <seg>; 16:9 is centre-cropped to 4:3 in
     # Remotion, cx (0..1, default 0.5) from <episode>/heygen/crop.json {"HG03": 0.47} shifts the crop to the face
     hdir = fdir / "heygen"
     if hdir.exists():
@@ -93,6 +94,14 @@ def main():
             shutil.copy2(ep / name, proj / "src/episode" / name)
     (proj / "src/episode/footage.json").write_text(json.dumps(footage, ensure_ascii=False, indent=1), encoding="utf-8")
     (proj / "src/episode/annotations.json").write_text(json.dumps(anns, ensure_ascii=False, indent=1), encoding="utf-8")
+    # social badge rows: shared presenter profile, overridable per episode (episode.yaml `social:`)
+    import yaml
+    epy = yaml.safe_load((ep / "episode.yaml").read_text(encoding="utf-8")) if (ep / "episode.yaml").exists() else {}
+    epy = epy or {}
+    prof = REPO / "assets/presenter" / str(epy.get("presenter") or "cool-breeze") / "presenter.yaml"
+    pres = yaml.safe_load(prof.read_text(encoding="utf-8")) if prof.exists() else {}
+    rows = epy.get("social") or (pres or {}).get("social") or []
+    (proj / "src/episode/social.json").write_text(json.dumps({"rows": rows}, ensure_ascii=False, indent=1), encoding="utf-8")
     st = {}
     for v in footage.values(): st[v["status"]] = st.get(v["status"], 0) + 1
     print("footage:", st)

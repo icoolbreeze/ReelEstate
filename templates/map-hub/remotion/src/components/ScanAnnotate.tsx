@@ -146,7 +146,8 @@ export const ScanAnnotate: React.FC<{ fo: Footage; ann?: Ann; local: number; inF
           })}
         </div>
       )}
-      <div style={{ position: "absolute", right: 60, top: 54, fontFamily: NUM, fontStyle: "italic", fontWeight: 700, fontSize: 22, letterSpacing: 3, color: done ? "#ECCE70" : "#FFFFFF", textShadow: "0 1px 6px rgba(0,0,0,0.5)", opacity: seg(local, scanStart - 2, scanStart + 3) }}>
+      {/* status line: back near its original spot (right 60, top 54 -> 66), just below the one-row SocialBadge (ends ~y 50) */}
+      <div style={{ position: "absolute", right: 60, top: 66, fontFamily: NUM, fontStyle: "italic", fontWeight: 700, fontSize: 22, letterSpacing: 3, color: done ? "#ECCE70" : "#FFFFFF", textShadow: "0 1px 6px rgba(0,0,0,0.5)", opacity: seg(local, scanStart - 2, scanStart + 3) }}>
         {done ? "ANALYSIS · COMPLETE" : `SCAN ${String(Math.min(fired, N)).padStart(2, "0")}/${String(N).padStart(2, "0")}`}
       </div>
     </AbsoluteFill>
