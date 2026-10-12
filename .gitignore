@@ -110,3 +110,8 @@ desktop.ini
 *.bak
 
 jobs/agent/
+
+# Private voice references and per-episode runtime workspaces
+/assets/presenter/*/voice/
+/.wrangler/
+/projects/**/work/

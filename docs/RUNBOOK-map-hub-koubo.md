@@ -21,6 +21,9 @@ One series, many episodes. Each episode has its own folder. Voice-clone referenc
 
 Categories: `rental` 租赁, `resale` 二手房, `new-home` 新房, `knowledge` 房源知识与市场分析. The user does not create folders. They give a listing id, or a new-home 楼盘 name, and the agent runs section 0. Rental and resale store that id. New-home has no listing id. Knowledge uses a topic. `ep07-xihu` keeps its original folder name. The cloud listing API currently answers rental only.
 
+## Execution update (2026-10-12)
+See `docs/maphub-execution.md`: per-episode `work/remotion`, configurable executor, IndexTTS primary / explicit F5 backup, wav-bound word timestamps, and technical preflight before render. Never switch the shared template links. Existing estimated captions are draft-only; align normalized wavs before a final rebuild.
+
 ## Hard rules (stop and ask the user if a step would break one)
 - Only the user's own HeyGen avatar ("Cool Breeze") and the user's own cloned voice. Never upload, edit, move or delete the
   user's raw recordings (`voices/clone/*` reference audio, `avatar/` source clips) — read-only.
@@ -44,8 +47,8 @@ Categories: `rental` 租赁, `resale` 二手房, `new-home` 新房, `knowledge` 
 The agent picks the next episode number when `--episode` is omitted. Creates `<EP>/episode.yaml`, `episode.json` (sample numbers cleared), `footage/raw/`, `consent/`, plus `data/listing_ref.json` (rental/resale), `data/project.json` (new-home, no listing id), or `data/topic.json`. Footage rules: docs/FOOTAGE-SPEC.md.
 A listing id never goes in the folder name or in `episode.json`. New-home has no listing id. Stage 1 reads `listing.ref` for rental and fills facts from BeikeMicroservice.
 Then say `做视频 <id>` to grok, or `scripts\make-video.cmd <id> [stage]` (detached, resumable, logs in `<EP>/jobs/`).
-Do not copy `ep07-xihu` by hand. `python pipeline\maphub\stage.py <EP>` links the shared template into this episode.
-Check: `templates\map-hub\remotion\public` and `src\episode` are junctions into `<EP>` (`dir templates\map-hub\remotion` shows <JUNCTION>).
+Do not copy `ep07-xihu` by hand. `python pipeline\maphub\stage.py <EP>` prepares this episode's isolated Remotion workspace.
+Check: `<EP>/work/remotion/public` and `src/episode` point only into `<EP>`. Shared template links are left untouched.
 
 ## 1. Listing data (BeikeMicroservice crm_connector)
 - Follow `docs/crm.md` (service on 127.0.0.1:8020; `npm run listing:fetch -- <project>` / `pipeline/stages/listing.py`).
@@ -132,9 +135,11 @@ Hook stacking after this matte is in "User taste rules" below: room plate, then 
 ## 9. Assemble
     python pipeline\maphub\stage.py <EP>
     python pipeline\maphub\sync_assets.py <EP>
-    cd templates\map-hub\remotion; npm install; npm run typecheck
-    npx remotion still src/index.ts MapHubHeygen ..\..\..\<EP>\out\check.png --frame=60
-    npx remotion render src/index.ts MapHubHeygen ..\..\..\<EP>\out\final_vN.mp4 --gl=angle --concurrency=4
+    cd <EP>\work\remotion; npm run typecheck
+    # from the repo root; technical preflight is enforced:
+    python pipeline/maphub/render_episode.py <EP> --still 60
+    python pipeline/maphub/render_episode.py <EP> --concurrency 4
+    # add --draft only for an explicitly marked draft; final QA below still applies
 (1070 Ti box: render ≈ 10–20 min for 2 min.)
 
 ## 10. QA (all must pass before reporting)

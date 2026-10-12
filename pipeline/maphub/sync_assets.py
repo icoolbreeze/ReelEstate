@@ -11,6 +11,7 @@ Writes proj/src/episode/{footage,annotations}.json and copies episode.json + poi
 """
 import argparse, json, shutil, subprocess
 from pathlib import Path
+from workspace import project_for
 
 ROOT = Path(__file__).resolve().parent.parent
 REPO = ROOT.parent
@@ -31,10 +32,11 @@ def img_size(p):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("episode"); ap.add_argument("--proj", default=str(REPO / "templates/map-hub/remotion"))
+    ap.add_argument("episode"); ap.add_argument("--proj", default=None, help="episode-owned workspace only")
     ap.add_argument("--footage", default=None); ap.add_argument("--ann", default=None)
     a = ap.parse_args()
-    ep, proj = Path(a.episode), Path(a.proj)
+    ep = Path(a.episode).resolve()
+    proj = project_for(ep, a.proj)
     fdir = Path(a.footage) if a.footage else ep / "footage"; adir = Path(a.ann) if a.ann else ep / "annotations"
     S = json.loads((ep / "shots.json").read_text(encoding="utf-8"))
     pub = proj / "public"; (pub / "footage").mkdir(parents=True, exist_ok=True)

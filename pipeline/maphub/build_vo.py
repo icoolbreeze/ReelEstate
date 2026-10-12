@@ -13,6 +13,9 @@ presenter clips are used muted as visuals (rules/RULES.md §3).
 import argparse, asyncio, json, os, re, subprocess, sys, time
 from pathlib import Path
 import numpy as np
+from workspace import project_for
+from voice_config import read_yaml
+from voice_timing import read_alignment, require_clone_files, caption_frames, fingerprint
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -37,15 +40,27 @@ async def _synth(text, voice, rate, mp3):
                 words.append({"t": ch["text"], "s": ch["offset"] / 1e7, "e": (ch["offset"] + ch["duration"]) / 1e7})
     return words
 
-VOICE_DIR = None   # --voice-dir: pre-made (cloned) wavs <id>.wav replace edge-tts; captions fall back to linear timing
+VOICE_DIR = None
+ALIGNMENT_DIR = None
+DRAFT = False
 
 def tts(text, voice, rate, outdir, lid):
     mp3, js = outdir / f"{lid}.mp3", outdir / f"{lid}.json"
-    if VOICE_DIR and (VOICE_DIR / f"{lid}.wav").exists():
+    if VOICE_DIR:
+        if not (VOICE_DIR / f"{lid}.wav").is_file():
+            raise ValueError("missing cloned audio: " + lid)
+
         src = VOICE_DIR / f"{lid}.wav"
         sh("ffmpeg", "-y", "-v", "error", "-i", src, "-ar", "48000", "-b:a", "256k", mp3)
         dur = float(sh("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", mp3, text=True).stdout)
-        j = {"text": text, "rate": "clone", "voice": "clone:" + src.parent.name, "words": [], "dur": dur}
+        words = read_alignment(src, text, ALIGNMENT_DIR)
+        if not words and not DRAFT:
+            raise ValueError("missing word timestamps for " + lid + "; align the wav or explicitly use --draft")
+        if words and words[-1]["e"] > dur + 0.1:
+            raise ValueError("word timestamps exceed audio duration: " + lid)
+        j = {"text": text, "rate": "clone", "voice": "clone:" + src.parent.name, "words": words, "dur": dur,
+             "audio_sha256": fingerprint(src), "source": str(src.relative_to(REPO)),
+             "caption_timing": "word" if words else "estimated"}
         js.write_text(json.dumps(j, ensure_ascii=False, indent=1), encoding="utf-8"); return j
     if js.exists():
         j = json.loads(js.read_text(encoding="utf-8"))
@@ -88,16 +103,34 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("episode")
     ap.add_argument("--voice-dir", default=None, help="dir of cloned <line id>.wav (normalized) used instead of edge-tts")
-    ap.add_argument("--script", default="script.json", help="script file inside the episode dir (e.g. script_v2.json)")
-    ap.add_argument("--proj", default=str(REPO / "templates/map-hub/remotion"))
+    ap.add_argument("--script", default=None, help="script file inside the episode dir (e.g. script_v2.json)")
+    ap.add_argument("--proj", default=None, help="episode-owned workspace only")
+    ap.add_argument("--alignment-dir", help="word timestamp JSONs named by line id")
+    ap.add_argument("--draft", action="store_true", help="allow estimated caption times")
     ap.add_argument("--voice"); ap.add_argument("--rate")
     ap.add_argument("--bgm", default=str(SHOTCRAFT / "assets/audio/bgm/house-vibez.mp3"))
     ap.add_argument("--opener-sfx", default="", help="wav laid at t=0 under the opener (e.g. multiplane-opener/out/sfx_v4.wav)")
     a = ap.parse_args()
-    epd, proj = Path(a.episode), Path(a.proj)
-    global VOICE_DIR; VOICE_DIR = Path(a.voice_dir) if a.voice_dir else None
-    S = json.loads((epd / a.script).read_text(encoding="utf-8"))
-    voice, rate = a.voice or S["voice"], a.rate or S["rate"]
+    epd = Path(a.episode).resolve()
+    proj = project_for(epd, a.proj)
+    global VOICE_DIR, ALIGNMENT_DIR, DRAFT
+    VOICE_DIR = Path(a.voice_dir).resolve() if a.voice_dir else None
+    ALIGNMENT_DIR = Path(a.alignment_dir).resolve() if a.alignment_dir else None
+    DRAFT = a.draft
+    script_file = a.script or read_yaml(epd / "episode.yaml").get("script", "script.json")
+    script_path = (epd / script_file).resolve()
+    if epd not in script_path.parents:
+        raise ValueError("script must be inside the episode")
+    S = json.loads(script_path.read_text(encoding="utf-8-sig"))
+    voice, rate = a.voice or S.get("voice", "zh-CN-YunjianNeural"), a.rate or S.get("rate", "+18%")
+    if VOICE_DIR:
+        if REPO not in VOICE_DIR.parents:
+            raise ValueError("voice-dir must be inside the repo")
+        require_clone_files(S, VOICE_DIR)
+        for line in S["lines"] + ([S["hook"]] if S.get("hook") else []):
+            words = read_alignment(VOICE_DIR / (line["id"] + ".wav"), line["tts"], ALIGNMENT_DIR)
+            if not words and not DRAFT:
+                raise ValueError("missing word timestamps for " + line["id"] + "; align the wav or use --draft")
     vodir = proj / "public/episode/vo"; vodir.mkdir(parents=True, exist_ok=True)
     (proj / "src/episode").mkdir(parents=True, exist_ok=True)
 
@@ -109,15 +142,11 @@ def main():
             t = max(t, OPENER_FRAMES / FPS + 0.15)
         start = t; end = t + j["dur"]
         f0 = round(start * FPS)
-        ct = char_time(j["words"], L["tts"], j["dur"])
-        # caption chunks: locate each chunk's start in the tts text by matching normalised chars proportionally
-        caps, ntts, acc = [], norm_cap(L["tts"]), 0
-        total = sum(len(norm_cap(c)) for c in L["cap"])
-        for c in L["cap"]:
-            frac0 = acc / total; acc += len(norm_cap(c)); frac1 = acc / total
-            caps.append({"text": c, "f0": f0 + round(ct(frac0 * len(L["tts"])) * FPS), "f1": f0 + round(ct(frac1 * len(L["tts"])) * FPS)})
+        caps = caption_frames(L["tts"], L["cap"], j["words"], j["dur"], f0, FPS,
+                              spans=L.get("cap_spans"), allow_estimated=DRAFT or not VOICE_DIR)
         rec = {k: v for k, v in L.items() if k not in ("tts", "cap", "gap")}
-        rec.update(f0=f0, f1=round(end * FPS), dur=round(j["dur"], 3), caps=caps, audio=f"episode/vo/{L['id']}.mp3", tts=L["tts"])
+        rec.update(f0=f0, f1=round(end * FPS), dur=round(j["dur"], 3), caps=caps, audio=f"episode/vo/{L['id']}.mp3", tts=L["tts"],
+                   caption_timing=j.get("caption_timing", "word"), source_audio=j.get("source"), source_sha256=j.get("audio_sha256"))
         if L.get("enter"):
             rec["click"] = f0 - CLICK_LEAD
         if L.get("insert"):   # cut-away inside a map line: cursor clicks `mark`, clip opens from it at caption chunk `cap`, closes at line end
@@ -137,17 +166,17 @@ def main():
             lines[i]["v0"] = max(lines[i]["v0"], OPENER_FRAMES)   # the opener always plays to its last frame
         lines[i - 1]["v1"] = lines[i]["v0"]
     total = lines[-1]["v1"]
-    tl = {"fps": FPS, "width": 1440, "height": 1080, "total": total, "opener": OPENER_FRAMES, "voice": voice, "rate": rate, "lines": lines}
+    tl = {"fps": FPS, "width": 1440, "height": 1080, "total": total, "opener": OPENER_FRAMES, "voice": voice, "rate": rate, "lines": lines,
+          "audio_mode": "clone" if VOICE_DIR else "draft", "draft": bool(DRAFT or not VOICE_DIR),
+          "script_file": str(script_path.relative_to(epd)), "script_sha256": fingerprint(script_path)}
     # optional on-camera hook BEFORE the opener (own audio file; the main mix stays aligned to the opener at frame 0 of the main comp)
     if S.get("hook"):
         Hk = S["hook"]; j = tts(Hk["tts"], voice, rate, vodir, Hk["id"])
-        lead = 0.25; f0 = round(lead * FPS); ct = char_time(j["words"], Hk["tts"], j["dur"])
-        caps, acc, tot = [], 0, sum(len(norm_cap(c)) for c in Hk["cap"])
-        for c in Hk["cap"]:
-            fr0 = acc / tot; acc += len(norm_cap(c)); fr1 = acc / tot
-            caps.append({"text": c, "f0": f0 + round(ct(fr0 * len(Hk["tts"])) * FPS), "f1": f0 + round(ct(fr1 * len(Hk["tts"])) * FPS)})
+        lead = 0.25; f0 = round(lead * FPS)
+        caps = caption_frames(Hk["tts"], Hk["cap"], j["words"], j["dur"], f0, FPS,
+                              spans=Hk.get("cap_spans"), allow_estimated=DRAFT or not VOICE_DIR)
         hf = round((lead + j["dur"] + 0.35) * FPS)
-        tl["hook"] = {**{k: v for k, v in Hk.items() if k not in ("cap",)}, "f0": f0, "f1": f0 + round(j["dur"] * FPS), "dur": round(j["dur"], 3), "frames": hf, "caps": caps, "audio": f"episode/vo/{Hk['id']}.mp3"}
+        tl["hook"] = {**{k: v for k, v in Hk.items() if k not in ("cap",)}, "f0": f0, "f1": f0 + round(j["dur"] * FPS), "dur": round(j["dur"], 3), "frames": hf, "caps": caps, "audio": f"episode/vo/{Hk['id']}.mp3", "caption_timing": j.get("caption_timing", "word"), "source_audio": j.get("source"), "source_sha256": j.get("audio_sha256")}
         sh("ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-t", str(hf / FPS), "-i", f"anullsrc=r={SR}:cl=stereo", "-i", vodir / f"{Hk['id']}.mp3",
            "-filter_complex", f"[1]adelay={int(lead*1000)}|{int(lead*1000)},aresample={SR},loudnorm=I=-16:TP=-1.5:LRA=7[v];[0][v]amix=inputs=2:duration=first:normalize=0", "-ar", SR, proj / "public/episode/hook.wav")
     (proj / "src/episode/timeline.json").write_text(json.dumps(tl, ensure_ascii=False, indent=1), encoding="utf-8")

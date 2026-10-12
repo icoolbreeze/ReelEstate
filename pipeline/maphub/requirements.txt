@@ -1,6 +1,7 @@
 # python >= 3.10; ffmpeg/ffprobe on PATH; node >= 18 for Remotion
 edge-tts>=7
 numpy
+PyYAML>=6
 opencv-python>=4.9      # TrackerVit needs >=4.9; flow tracker works on any 4.x
 pillow
 # base-map vectorisation (pipeline/basemap/amap_vector.py) only:

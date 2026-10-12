@@ -233,12 +233,15 @@ npm run make -- "<一句话>" [--style mediastorm] [--ratio 4x3] [--voice edge|q
 - 提交信息用英文。
 
 ## map-hub 口播 series (@贝壳-TV) — end-to-end runbook
+
+执行更新（2026-10-12）：先读 `docs/maphub-execution.md`。每期渲染 cwd 是 `<ep>/work/remotion`，不切换共享模板链接；后台入口支持 auto/claude/zcode/opencode，Grok 只显式选择。IndexTTS-2.5 主用，F5 显式备用；上传入口合并共享 voice、单期覆盖与逐行设置。正式克隆音频缺段或缺有效词时间戳必须停止，Edge 与估算字幕只用于草稿。正式渲染走 `pipeline/maphub/render_episode.py`，之后仍必须通过原有审片流程。
+
 - **Start here:** `docs/RUNBOOK-map-hub-koubo.md` (listing → POIs → script → IndexTTS-2.5 voice clone on one Kaggle T4 → Muse via Playwright → annotations →
   HeyGen via Playwright → heygen_mark → split → matting → assemble → QA, plus the user's taste rules).
 - HeyGen download writes `heygen/export.mp4`. Then `python pipeline/maphub/heygen_mark.py <ep>` covers only the bottom-right mark on that original (one `generate_image` still plus a mask; the face stays sharp and the sofa stays soft). Exit 3 means save `heygen/mark/repair.png` and rerun. Split uses `heygen/export_nomark.mp4` and does not overwrite `export.mp4`.
 - Code: `templates/map-hub/remotion/` (Remotion 4.0.529, comps `MapHubHeygen`, `MapHubKoubo`, `Opener`) + `pipeline/maphub/*.py`.
   Rules: `rules/map-hub/`. Example episode: `projects/map-hub/ep07-xihu/`.
-- Always `python pipeline/maphub/stage.py projects/map-hub/<ep>` first: it links the template's `public/` and `src/episode/`
+- Always `python pipeline/maphub/stage.py projects/map-hub/<ep>` first: it prepares `<ep>/work/remotion`; that workspace's `public/` and `src/episode/`
   into that episode, so every generated file stays inside the episode folder (no cross-episode references).
 - Only the user's own HeyGen avatar ("Cool Breeze") and cloned voice; never modify the user's raw recordings; never touch
   `.mcp.json` / `.grok/`; no commit/push unless asked.

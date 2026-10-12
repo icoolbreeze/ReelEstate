@@ -6,16 +6,22 @@ script.json: {"engine": "cosyvoice|f5", "ref_wav": "assets/presenter/cool-breeze
               (lines may also be plain strings)
 Writes DIR/<id>.wav + DIR/timings.json. fp32 (Pascal has no bf16)."""
 import sys, os, json, time, argparse, subprocess
+from pathlib import Path
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 ap = argparse.ArgumentParser()
 ap.add_argument("script")
 ap.add_argument("--out")
+ap.add_argument("--episode", help="resolve shared presenter and per-episode voice settings")
 ap.add_argument("--fp16", action="store_true")
 ap.add_argument("--engine", choices=["cosyvoice", "f5", "indextts2", "indextts25"], default=None)
 a = ap.parse_args()
 cfg = json.load(open(a.script, encoding="utf-8"))
 engine = a.engine or cfg.get("engine") or "indextts25"
+if a.episode:
+    sys.path.insert(0, os.path.join(ROOT, "pipeline", "maphub"))
+    from voice_config import prepare_narration
+    cfg, _voice = prepare_narration(Path(a.episode), cfg, engine=engine)
 if engine == "indextts25":
     raise SystemExit("indextts25 (default) runs on Kaggle: python scripts/voice/push_indextts25.py --episode <ep> --script <json>; local F5: --engine f5")
 

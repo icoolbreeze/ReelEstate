@@ -12,6 +12,8 @@ heygen:
   plan_limit_s: 60
   oncam_budget_s: 55
 voice:
+  fallback_engine: f5            # Explicit backup; never switch an episode's voice silently
+  fallback_policy: explicit
   engine: indextts25             # Kaggle one T4, kernels/tts_indextts25.py, fp32 on T4. F5 only when --kernel tts_f5 or --engine f5 is explicit. cosyvoice rejected as flat.
   ref_wav: assets/presenter/cool-breeze/voice/ref_phone_v1.wav    # DEFAULT: user phone recording (approved 2026-10-12)
   ref_text: assets/presenter/cool-breeze/voice/ref_phone_v1.txt

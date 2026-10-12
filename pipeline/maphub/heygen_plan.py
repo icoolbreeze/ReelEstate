@@ -17,9 +17,12 @@ of mouth-closed handle on both sides. In Remotion a segment starts PAD frames be
 Uses the per-line TTS files (proj/public/episode/vo/<line>.mp3) so timing matches the timeline exactly; when the cloned
 voice replaces the TTS, re-run build_vo.py then this plan step, and give HeyGen the new heygen_audio.wav.
 """
-import argparse, json, subprocess, sys
+import argparse, json, math, subprocess, sys
 from pathlib import Path
 import numpy as np
+from workspace import project_for
+from voice_config import read_yaml
+from voice_timing import fingerprint
 
 ROOT = Path(__file__).resolve().parent.parent
 REPO = ROOT.parent
@@ -41,6 +44,16 @@ def on_cam(tl):
 def plan(ep, proj):
     tl = json.loads((proj / "src/episode/timeline.json").read_text(encoding="utf-8"))
     segs = on_cam(tl); out = ep / "heygen"; out.mkdir(exist_ok=True)
+    previous = out / "segments.json"
+    timeline_hash = fingerprint(proj / "src/episode/timeline.json")
+    if previous.is_file() and (out / "heygen_audio.wav").is_file():
+        old = json.loads(previous.read_text(encoding="utf-8"))
+        current_budget = float(read_yaml(ep / "episode.yaml").get("oncam_budget_s", LIMIT))
+        if not math.isfinite(current_budget) or current_budget <= 0 or float(old.get("total", 0)) > current_budget:
+            raise ValueError("existing HeyGen plan exceeds the current budget")
+        if old.get("timeline_sha256") == timeline_hash:
+            print("HeyGen plan unchanged; preserving existing upload audio and cut points")
+            return
     buf = [np.zeros(int(LEAD * SR), np.float32)]; t = LEAD
     for i, s in enumerate(segs):
         a = dec(proj / "public" / s["audio"]); d = len(a) / SR
@@ -48,6 +61,9 @@ def plan(ep, proj):
         buf.append(a); t += d
         buf.append(np.zeros(int((GAP if i < len(segs) - 1 else TAIL) * SR), np.float32)); t += GAP if i < len(segs) - 1 else TAIL
     total = t
+    budget = float(read_yaml(ep / "episode.yaml").get("oncam_budget_s", LIMIT))
+    if not segs or not math.isfinite(budget) or budget <= 0 or total > budget:
+        raise ValueError("HeyGen audio %.2fs exceeds budget %.2fs or contains no on-camera segments" % (total, budget))
     for i, s in enumerate(segs):
         s["cut"] = [round(0 if i == 0 else s["speech"][0] - GAP / 2, 3), round(total if i == len(segs) - 1 else s["speech"][1] + GAP / 2, 3)]
         s["cutDur"] = round(s["cut"][1] - s["cut"][0], 3)
@@ -55,7 +71,7 @@ def plan(ep, proj):
     wav = out / "heygen_audio.wav"
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "f32le", "-ar", str(SR), "-ac", "1", "-i", "-", "-af", "loudnorm=I=-16:TP=-1.5:LRA=7", "-ar", str(SR), str(wav)],
                    input=(y / pk * 0.9).astype(np.float32).tobytes(), check=True)
-    J = {"total": round(total, 3), "speech": round(sum(s["dur"] for s in segs), 3), "lead": LEAD, "gap": GAP, "tail": TAIL, "segments": segs}
+    J = {"total": round(total, 3), "speech": round(sum(s["dur"] for s in segs), 3), "lead": LEAD, "gap": GAP, "tail": TAIL, "segments": segs, "timeline_sha256": fingerprint(proj / "src/episode/timeline.json")}
     (out / "segments.json").write_text(json.dumps(J, ensure_ascii=False, indent=1), encoding="utf-8")
     md = [f"# HeyGen segments — {ep.name}", "",
           f"ONE landscape 16:9 video, 720p, avatar **Cool Breeze**, audio = upload `heygen/heygen_audio.wav` (lip-sync to our audio; do not type the script).",
@@ -102,12 +118,22 @@ def default_split_src(ep):
     raise SystemExit(2)
 
 def split(ep, src, offset, fdir):
-    J = json.loads((ep / "heygen/segments.json").read_text(encoding="utf-8")); fdir.mkdir(parents=True, exist_ok=True)
+    plan_path = ep / "heygen/segments.json"
+    J = json.loads(plan_path.read_text(encoding="utf-8"))
+    if J.get("timeline_sha256") != fingerprint(ep / "data/timeline.json"):
+        raise ValueError("HeyGen plan is stale; rebuild it before split")
+    original = ep / "heygen/export.mp4"
+    if (original if original.is_file() else src).stat().st_mtime < plan_path.stat().st_mtime:
+        raise ValueError("HeyGen export predates the current voice plan; download the matching generation first")
+    fdir.mkdir(parents=True, exist_ok=True)
+    provenance = {"plan_sha256": fingerprint(plan_path), "source_sha256": fingerprint(src), "segments": {}}
     for s in J["segments"]:
         a, b = s["cut"]
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{a + offset:.3f}", "-i", str(src), "-t", f"{b - a:.3f}", "-an", "-r", "30",
                         "-c:v", "libx264", "-crf", "16", "-pix_fmt", "yuv420p", str(fdir / f"{s['seg']}.mp4")], check=True)
         print(s["seg"], f"{a:.2f}–{b:.2f}")
+        provenance["segments"][s["seg"]] = fingerprint(fdir / (s["seg"] + ".mp4"))
+    (ep / "heygen/split_manifest.json").write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 def placeholders(ep, pdir, fdir):
     """stand-ins: Muse P clips, padded to 1280x720 (blurred sides) like a HeyGen export, trimmed to each cut length"""
@@ -123,9 +149,9 @@ def placeholders(ep, pdir, fdir):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("episode"); ap.add_argument("cmd", choices=["plan", "split", "placeholders"]); ap.add_argument("src", nargs="?")
-    ap.add_argument("--proj", default=str(REPO / "templates/map-hub/remotion")); ap.add_argument("--footage", default=None, help="default <episode>/footage/heygen"); ap.add_argument("--offset", type=float, default=0.0)
+    ap.add_argument("--proj", default=None, help="episode-owned workspace only"); ap.add_argument("--footage", default=None, help="default <episode>/footage/heygen"); ap.add_argument("--offset", type=float, default=0.0)
     a = ap.parse_args(); ep = Path(a.episode)
-    if a.cmd == "plan": plan(ep, Path(a.proj))
+    if a.cmd == "plan": plan(ep.resolve(), project_for(ep, a.proj))
     fh = Path(a.footage) if a.footage else ep / "footage/heygen"
     if a.cmd == "plan": pass
     elif a.cmd == "split": split(ep, Path(a.src) if a.src else default_split_src(ep), a.offset, fh)
