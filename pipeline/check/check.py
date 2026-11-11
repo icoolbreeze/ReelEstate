@@ -16,6 +16,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from pipeline.common.voice_config import read_yaml
+
 from reel_common import CATEGORIES, REPO_ROOT, load_json, resolve_project_dir, setup_console, strip_comments  # noqa: E402
 from jsonschema_lite import Validator  # noqa: E402
 
@@ -312,7 +315,7 @@ TEXT_KEYS_WALL = {"community", "layout", "area", "rent", "orientation", "floor"}
 
 
 def rendered_texts(project_dir: Path) -> list[tuple[str, str]]:
-    """Every string that can appear on screen from shots.json / wall.json (project.json is scanned separately)."""
+    """Every string that can appear on screen from shots.json / wall.json (compliance.json and actual narration are scanned separately)."""
     out: list[tuple[str, str]] = []
     shots_p = project_dir / "shots.json"
     if shots_p.exists():
@@ -390,9 +393,7 @@ def check_assets(p: dict, r: Report, project_dir: Path) -> None:
     sec = "素材清单"
     man_p = project_dir / "assets" / "manifest.json"
     if not man_p.exists():
-        # Legacy projects without the one-sentence workflow are allowed to skip.
-        if (project_dir / "shots.json").exists() or (project_dir / "brief.json").exists():
-            r.fail(sec, "缺少 assets/manifest.json（一句话成片必须记录每个素材的来源/许可/AI/水印）")
+        r.fail(sec, "缺少 assets/manifest.json，必须记录素材来源、许可、AI 和水印状态")
         return
     man = load_json(man_p)
     assets = man.get("assets") or []
@@ -550,8 +551,34 @@ def check_style(p: dict, r: Report) -> None:
 
 def run(project_dir: Path) -> Report:
     r = Report()
-    raw = load_json(project_dir / "project.json")
+    if not (project_dir / "episode.yaml").is_file() or not (project_dir / "episode.json").is_file():
+        r.fail("结构", "只支持 episode.yaml 视频工程，不支持旧 project.json 工程")
+        return r
+    manifest = project_dir / "compliance.json"
+    if not manifest.is_file():
+        r.fail("发布资料", "缺少 compliance.json；按 templates/listing/compliance.example.json 填写真实资料")
+        return r
+    raw = load_json(manifest)
+    if not isinstance(raw, dict):
+        r.fail("结构", "compliance.json 顶层必须是对象")
+        return r
     p = strip_comments(raw)
+    config = read_yaml(project_dir / "episode.yaml")
+    if p.get("id") != project_dir.name or p.get("category") != config.get("category"):
+        r.fail("结构", "compliance.json 的 id/category 必须与本期 episode.yaml 一致")
+        return r
+    timeline_path = project_dir / "data/timeline.json"
+    if not timeline_path.is_file():
+        r.fail("旁白", "缺少 data/timeline.json，无法检查实际口播")
+        return r
+    timeline = load_json(timeline_path)
+    rows = ([timeline["hook"]] if timeline.get("hook") else []) + list(timeline.get("lines") or [])
+    p["narration"] = {"segments": [{"id": str(row.get("id", "")), "text": str(row.get("tts") or row.get("text") or ""), "presenter": "fullscreen" if row.get("onCam") == "A" else "pip-right" if row.get("onCam") == "PIP" else "voiceover"} for row in rows]}
+    if not p["narration"]["segments"]:
+        r.fail("旁白", "实际时间线没有口播内容")
+    if timeline.get("audio_mode") == "clone" and p.get("ai_voice") is not True:
+        r.fail("AI标识", "本期使用 AI 配音，compliance.json 必须标记 ai_voice=true")
+
     cat = p.get("category")
     if cat not in CATEGORIES:
         r.fail("结构", f"category 必须是 {CATEGORIES} 之一，当前：{cat}")
@@ -561,7 +588,7 @@ def run(project_dir: Path) -> Report:
         for e in errs:
             r.fail("结构（Schema）", e)
     else:
-        r.ok("结构（Schema）", f"project.json 符合 pipeline/schema/{cat}.json")
+        r.ok("结构（Schema）", f"compliance.json 与实际旁白符合 pipeline/schema/{cat}.json")
     check_placeholders(p, r)
     check_mandatory(p, r, project_dir)
     check_category(p, r, project_dir)
@@ -665,3 +692,4 @@ def main(argv=None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+

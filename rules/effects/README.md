@@ -7,7 +7,7 @@ Seeded, deterministic effect picks for ReelEstate promos. Each video draws from 
 | Source | License | What we use |
 |---|---|---|
 | [video-shotcraft](https://github.com/Vincentwei1021/video-shotcraft) | Apache-2.0 | Motion grammar reference; Remotion ports are **re-implemented and re-skinned** to the mediastorm style tokens. Attribution preserved. |
-| [video-talkcraft](https://github.com/Vincentwei1021/video-talkcraft) | PolyForm Noncommercial 1.0.0 | **Semantic pool ideas only** (钩子 / 数据 / 对比 / 列举 / 号召…). No talkcraft code, demos, or assets are copied. |
+| [video-talkcraft](https://github.com/Vincentwei1021/video-talkcraft) | PolyForm Noncommercial 1.0.0 | 当前实现仅采用语义分类（钩子 / 数据 / 对比 / 列举 / 号召…），未复制其代码、演示或素材；后续按本项目非商业用途规则评估接入，非商业许可本身不构成排除理由。 |
 
 Excluded motifs (too cheesy for property explainers): neon marquees, bubble swarms, paper planes, heavy glitch, confetti bursts, magician flourishes.
 
@@ -51,7 +51,7 @@ npm run effects -- projects/rental/<id> --force         # re-derive (same seed �
 1. Read the source card + demo TSX in video-shotcraft (Apache-2.0); keep its tuned timing, drop its skin.
 2. Implement in `remotion/src/effects/*.tsx` using only `StyleTokens` colours/fonts; add the SPDX + attribution header.
 3. Register it in `remotion/src/effects/registry.ts` and `types.ts` (`EffectId`), and add a catalog entry (`ported: true`).
-4. Don't port talkcraft code (noncommercial licence) — its taxonomy may inform pools only.
+4. 第三方动效代码按本项目非商业用途规则（`AGENTS.md` §1 / `docs/CONVENTIONS-shared.md` §0）评估；不再仅因 talkcraft 使用非商业许可而禁止移植。实际接入仍须满足原许可的署名、修改与再分发条件。
 
 ## Remotion
 

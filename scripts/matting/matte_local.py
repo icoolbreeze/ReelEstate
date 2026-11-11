@@ -3,10 +3,10 @@
 Default engine is MatAnyone2; RobustVideoMatting stays as the automatic backup.
 
     python scripts/matting/matte_local.py IN.mp4 [IN2.mp4 ...] [--out DIR]
-        [--engine matanyone2|rvm] [--mask MASK.png] [--max-size 720] [--no-fallback]
+        [--engine matanyone2|rvm] [--mask MASK.png] [--max-size 1080] [--no-fallback]
         (RVM only: [--model resnet50|mobilenetv3] [--downsample 0.4] [--fp16])
 
-Per input writes into --out (default: <input dir>/../matte/):
+Per input writes into --out (default: <episode>/footage/matte/ inside an episode, else <input dir>/../matte/):
   <stem>_rgba.mov    ProRes 4444 + alpha (yuva444p10le)  -> editing / master
   <stem>_alpha.webm  VP9 + alpha (yuva420p)              -> Remotion <OffthreadVideo transparent>
   <stem>_check.mp4   grayscale matte, H.264              -> QA
@@ -23,6 +23,10 @@ import numpy as np
 import torch
 
 REPO = Path(__file__).resolve().parents[2]
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+from pipeline.common.matte_size import acceptance, inference_size, oom_note, use_fp16  # noqa: E402
+from pipeline.common.color_restore import restored_for_any  # noqa: E402
 WDIR = REPO / "vendor" / "rvm"
 M2DIR = REPO / "vendor" / "matanyone2" / "pretrained_models"
 URL = "https://github.com/PeterL1n/RobustVideoMatting/releases/download/v1.0.0/rvm_{m}_fp32.torchscript"
@@ -73,6 +77,15 @@ def open_encoders(out, stem, w, h, fps):
     e_chk = enc(["-f", "rawvideo", "-pix_fmt", "gray", "-s", f"{w}x{h}", "-r", fps, "-i", "-",
                  "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", str(out / f"{stem}_check.mp4")])
     return e_pro, e_webm, e_chk
+
+
+def default_out(f):
+    """<episode>/footage/matte for any input inside an episode (raw, restored/master, shots, heygen)."""
+    f = Path(f).resolve()
+    for parent in f.parents:
+        if (parent / "episode.yaml").is_file():
+            return parent / "footage" / "matte"
+    return f.parent.parent / "matte"
 
 
 def out_names(stem):
@@ -175,10 +188,9 @@ def matanyone2_one(f, out, explicit_mask, max_size, rvm_model_name, downsample, 
     mat = get_matanyone2_model(str(m2_weights()), dev)
     processor = InferenceCore(mat, cfg=mat.cfg)
 
-    # processing size: downsample when the short side exceeds max_size
-    nh, nw = h, w
-    if max_size and max_size > 0 and min(h, w) > max_size:
-        nh, nw = int(h / min(h, w) * max_size), int(w / min(h, w) * max_size)
+    # processing size: short-side cap. Never upscale. 4K inferred below 4K is not native 4K.
+    sized = inference_size(w, h, max_size)
+    nh, nw = sized["inference_height"], sized["inference_width"]
     mask_t = torch.from_numpy(mask_np).float().to(dev)
     if (nh, nw) != (h, w):
         mask_t = F.interpolate(mask_t[None, None], size=(nh, nw), mode="nearest")[0, 0]
@@ -262,6 +274,12 @@ def remove_partials(out, stem):
             p.unlink()
 
 
+def write_matte_report(out, stem, payload):
+    path = Path(out) / f"{stem}_report.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    return path
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("inputs", nargs="+")
@@ -269,8 +287,8 @@ def main():
     ap.add_argument("--engine", choices=["matanyone2", "rvm"], default="matanyone2",
                     help="matting engine (default: matanyone2; rvm is the automatic backup)")
     ap.add_argument("--mask", help="first-frame binary mask PNG for MatAnyone2 (default: RVM seeds one)")
-    ap.add_argument("--max-size", type=int, default=720,
-                    help="MatAnyone2: downsample when the short side exceeds this (default: 720)")
+    ap.add_argument("--max-size", type=int, default=1080,
+                    help="MatAnyone2: downsample when the short side exceeds this (default: 1080; smaller inputs are not upscaled)")
     ap.add_argument("--no-fallback", action="store_true",
                     help="exit non-zero instead of falling back to RVM")
     ap.add_argument("--model", default="resnet50", help="RVM only: resnet50 (default) | mobilenetv3")
@@ -285,14 +303,20 @@ def main():
     print("device:", dev, torch.cuda.get_device_name(0) if dev == "cuda" else "")
 
     report, failed = [], False
-    for f in map(Path, a.inputs):
-        out = Path(a.out) if a.out else f.parent.parent / "matte"
+    for f in (restored_for_any(Path(x), "matte") for x in a.inputs):   # D-Log M camera clips -> restored ProRes
+        out = Path(a.out) if a.out else default_out(f)
         out.mkdir(parents=True, exist_ok=True)
         keep = set(out_names(f.stem)) | {f"{f.stem}_mask.png"}
         before = {p.name for p in out.iterdir()}
 
-        if a.engine == "rvm":
-            n, dt_s = rvm_one(f, out, a.model, a.downsample, a.fp16, dev)
+        requested = a.engine
+        fallback_reason = None
+        actual = requested
+        n, dt_s = 0, 0.0
+        if requested == "matanyone2" and a.fp16:
+            print("fp16 ignored: MatAnyone2 stays fp32 on this machine")
+        if requested == "rvm":
+            n, dt_s = rvm_one(f, out, a.model, a.downsample, use_fp16("rvm", a.fp16), dev)
             print("engine: rvm")
         else:
             try:
@@ -301,23 +325,50 @@ def main():
                 print("engine: matanyone2")
             except Exception as e:  # import / download / CUDA / OOM / inference -> RVM
                 reason = f"{type(e).__name__}: {e}".replace("\n", " ")[:300]
+                fallback_reason = reason
+                actual = "failed" if a.no_fallback else "rvm"
                 remove_partials(out, f.stem)
                 if dev == "cuda":
                     torch.cuda.empty_cache()
+                oom = oom_note(reason)
                 if a.no_fallback:
                     print(f"engine: failed (fallback disabled: {reason})")
+                    if oom:
+                        print(oom)
+                    failed_report = acceptance(requested, "failed", reason)
+                    failed_report.update({"matanyone2_passed": False, "frames": 0, "fp16": False, "max_size": a.max_size, "oom": oom})
+                    write_matte_report(out, f.stem, failed_report)
                     failed = True
                     continue
-                n, dt_s = rvm_one(f, out, a.model, a.downsample, a.fp16, dev)
+                n, dt_s = rvm_one(f, out, a.model, a.downsample, use_fp16("rvm", a.fp16), dev)
                 print(f"engine: rvm (fallback: {reason})")
+                if oom:
+                    print(oom)
+                print("matanyone2_passed: false")
 
         missing = [nm for nm in out_names(f.stem) if not (out / nm).is_file()]
         if missing:
             print("missing outputs:", ", ".join(missing))
             failed = True
             continue
-        r = {"input": str(f), "out": str(out), "frames": n, "seconds": round(dt_s, 1),
-             "fps": round(n / dt_s, 2) if dt_s else None}
+        sized = None
+        try:
+            pw, ph, _fps = probe(f)
+            sized = inference_size(pw, ph, a.max_size if requested == "matanyone2" else 0)
+        except (OSError, subprocess.CalledProcessError, ValueError, KeyError):
+            sized = None
+        r = acceptance(requested, actual, fallback_reason)
+        r.update({"input": str(f), "out": str(out), "frames": n, "seconds": round(dt_s, 1),
+                  "fps": round(n / dt_s, 2) if dt_s else None, "fp16": use_fp16(actual if actual != "failed" else requested, a.fp16),
+                  "max_size": a.max_size, "mask": a.mask})
+        if sized:
+            r.update(sized)
+            if sized["mask_interpolated_to_output"]:
+                r["size_note"] = "遮罩已插值回输入尺寸，不能标成该档原生抠像。"
+                r["native_4k"] = False
+        if fallback_reason:
+            r["inference_note"] = "实际引擎不是 MatAnyone2。上面的推理尺寸只描述原先请求，不能当作 MatAnyone2 验收。"
+        write_matte_report(out, f.stem, r)
         print(json.dumps(r, ensure_ascii=False)); report.append(r)
     return 1 if failed else 0
 

@@ -29,6 +29,15 @@ def _resolve_file(raw, *bases):
             return _inside_repo(choice)
     raise SystemExit("file not found: %s" % path.name)
 
+EXIT_TTS_FALLBACK = 21  # push_job.py queue policy
+
+
+def _f5_cmd(script, episode, run):
+    out = episode / "voice" / ("f5_fallback_%s" % run)
+    return ["cmd", "/c", str(REPO / "scripts/voice/clone_tts_f5.cmd"), str(script),
+            "--episode", str(episode), "--out", str(out)]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--episode", required=True)
@@ -36,7 +45,10 @@ def main():
     parser.add_argument("--run", default="indextts25")
     parser.add_argument("--emotion-ref", action="append", default=[], help="additional emotion wavs inside the repo")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--mock-queued", action="store_true",
+                        help="with --dry-run: simulate 10 queued attempts and show the F5 fallback")
     parser.add_argument("--param", action="append", default=[])
+    parser.add_argument("--queue-wait", type=int, default=None, help="forwarded to push_job.py (0 = cancel a QUEUED kernel immediately)")
     args = parser.parse_args()
     if not re.fullmatch(r"[a-zA-Z0-9_-]+", args.run):
         raise SystemExit("unsafe run name")
@@ -81,6 +93,13 @@ def main():
             inputs[name] = path
     params.update(ref=ref.name, script="resolved_%s.json" % args.run)
     params.setdefault("lang", "ZH")
+    if args.dry_run and args.mock_queued:
+        r = subprocess.run([sys.executable, str(REPO / "scripts/kaggle/push_job.py"), "--episode", str(episode),
+                            "--job", "tts", "--kernel", "tts_indextts25", "--kind", "tts", "--run", args.run,
+                            "--inputs", str(ref), "--dry-run", "--mock-status", "queued"])
+        if r.returncode == EXIT_TTS_FALLBACK:
+            print("dry-run fallback:", " ".join(map(str, _f5_cmd(script, episode, args.run))))
+        raise SystemExit(0 if r.returncode == EXIT_TTS_FALLBACK else 1)
     if args.dry_run:
         print(json.dumps({"episode": episode.name, "run": args.run, "inputs": sorted(inputs),
                           "params": params, "resolved": resolved}, ensure_ascii=False, indent=2))
@@ -89,12 +108,19 @@ def main():
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(resolved, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     cmd = [sys.executable, str(REPO / "scripts/kaggle/push_job.py"),
-           "--episode", str(episode), "--job", "tts", "--kernel", "tts_indextts25",
+           "--episode", str(episode), "--job", "tts", "--kernel", "tts_indextts25", "--kind", "tts",
            "--run", args.run, "--accelerator", "NvidiaTeslaT4",
            "--inputs", *map(str, inputs.values()), str(target)]
+    if args.queue_wait is not None:
+        cmd += ["--queue-wait", str(args.queue_wait)]
     for key, value in params.items():
         cmd += ["--param", "%s=%s" % (key, value)]
     result = subprocess.run(cmd)
+    if result.returncode == EXIT_TTS_FALLBACK:
+        # Queue policy: 10 attempts queued/failed -> local F5, same script + ref_phone_v1.
+        f5 = _f5_cmd(script, episode, args.run)
+        print("Kaggle queue exhausted; local F5 fallback:", " ".join(map(str, f5)))
+        raise SystemExit(subprocess.run(f5).returncode)
     if result.returncode == 0:
         print("next: python scripts/kaggle/pull_job.py --episode %s --job tts --run %s" % (args.episode, args.run))
     raise SystemExit(result.returncode)

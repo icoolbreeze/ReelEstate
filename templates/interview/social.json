@@ -1,0 +1,6 @@
+{
+  "rows": [
+    {"platform": "wechat-channels", "icon": "social/wechat-channels.svg", "handle": "@贝壳-TV"},
+    {"platform": "douyin", "icon": "social/douyin.svg", "handle": "@贝壳TV"}
+  ]
+}

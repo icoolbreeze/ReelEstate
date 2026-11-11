@@ -1,0 +1,24 @@
+{
+  "remotion": {
+    "manifest": "tools/remotion/package.json",
+    "lock": "tools/remotion/package-lock.json",
+    "dependencies": "tools/remotion/node_modules",
+    "consumers": [
+      "listing",
+      "knowledge",
+      "interview"
+    ]
+  },
+  "python": {
+    "pipeline": "python (standard library + PyYAML, Pillow, numpy where required)",
+    "matting": "vendor/cosyvoice/.venv/Scripts/python.exe",
+    "indextts25": "vendor/indextts2/.venv/Scripts/python.exe",
+    "f5": "vendor/f5tts/.venv/Scripts/python.exe"
+  },
+  "policy": {
+    "per_episode_install": false,
+    "global_pip_install": false,
+    "gpu_environments": "Keep engine-specific environments; their numpy/transformers requirements differ.",
+    "models": "Keep shared engine models in vendor; episode Kaggle outputs are job results, not tool installations."
+  }
+}

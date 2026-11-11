@@ -4,7 +4,7 @@ name: cool-breeze
 display_name: Cool Breeze
 heygen:
   avatar: Cool Breeze            # the user's own HeyGen avatar — never use stock avatars
-  look: default                  # HeyGen look/outfit name if several exist
+  look: "Professional in suit on sofa"   # the user's SAVED look, confirmed (1 of 7 Cool Breeze looks; used for ep07, matches My Avatar thumbnail). Always select it by name, never a default; stop if not found. CONFIRMED by user 2026-10-13
   orientation: landscape         # 16:9; template centre-crops to 4:3
   resolution: 720p               # free plan
   background: plain              # plain backdrop helps matting
@@ -12,9 +12,15 @@ heygen:
   plan_limit_s: 60
   oncam_budget_s: 55
 voice:
-  fallback_engine: f5            # Explicit backup; never switch an episode's voice silently
+  engine: flova_minimax          # DEFAULT (approved 2026-10-12): MiniMax Speech 2.8 HD preset via flova MCP generate_speech (scripts/voice/flova_minimax_tts.py)
+  model: speech-2.8-hd
+  voice: Gentle_Youth            # = "Chinese (Mandarin)_Gentle_Youth"; matches the Cool Breeze avatar (young, warm, mid pitch)
+  flova_profile: kid4
+  tempo: 1.1                     # ffmpeg atempo after flova (pitch kept); flova cannot set MiniMax speed
+  mode: passage                  # one flova call for the whole passage (~10 credits); section timings from Whisper words
+  fallback_engine: indextts25    # fallback 1: Kaggle T4 kernels/tts_indextts25.py (clone of ref_phone_v1)
+  last_resort_engine: f5         # local F5 (scripts/voice/clone_tts_f5.cmd)
   fallback_policy: explicit
-  engine: indextts25             # Kaggle one T4, kernels/tts_indextts25.py, fp32 on T4. F5 only when --kernel tts_f5 or --engine f5 is explicit. cosyvoice rejected as flat.
   ref_wav: assets/presenter/cool-breeze/voice/ref_phone_v1.wav    # DEFAULT: user phone recording (approved 2026-10-12)
   ref_text: assets/presenter/cool-breeze/voice/ref_phone_v1.txt
   emo_ref_wav: assets/presenter/cool-breeze/voice/ref_phone_v1.wav  # IndexTTS-2.5 emotion ref (emo_ref per line, emo_alpha 1.0)
@@ -31,7 +37,7 @@ muse:
 matting:
   tool: scripts/matting/matte_local.cmd   # MatAnyone2 default on GTX 1070 Ti, auto-fallback to RVM; Kaggle later backup docs/kaggle-gpu.md
   engine: matanyone2
-  max_size: 720            # MatAnyone2: downsample when the short side exceeds
+  max_size: 1080           # MatAnyone2: short-side processing cap; smaller inputs are not upscaled
   model: resnet50          # RVM backup settings
   downsample: 0.4          # RVM backup settings
   output: <ep>/footage/heygen/HG00_alpha.webm

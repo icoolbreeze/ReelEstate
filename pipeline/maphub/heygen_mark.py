@@ -118,7 +118,7 @@ def color_match(src: np.ndarray, gen: np.ndarray, mask: np.ndarray) -> np.ndarra
     return np.clip(out, 0, 255).astype(np.uint8)
 
 
-def make_request(profile: str) -> dict:
+def make_request(profile: str | None) -> dict:
     return {
         "purpose": "Cover only the bottom-right mark on the original HeyGen export. Keep the shallow depth of field. Image only.",
         "tool": "generate_image",
@@ -128,25 +128,25 @@ def make_request(profile: str) -> dict:
         "prompt": PROMPT,
         "source_image": "heygen/mark/frame.png",
         "output_image": "heygen/mark/repair.png",
-        "params": {"profile": profile, "original": True},
+        "params": {"original": True, **({"profile": profile} if profile else {"account_mode": "auto"})},
     }
 
 
-def pinned_profile(existing: dict) -> str:
+def pinned_profile(existing: dict) -> str | None:
     if str(REPO) not in sys.path:
         sys.path.insert(0, str(REPO))
-    from pipeline.stages.map_fetch import resolve_map_profile
+    from pipeline.common.map_profile import resolve_map_profile
     return resolve_map_profile(existing)
 
 
-def need_image(ep: Path, request: dict, profile: str) -> None:
+def need_image(ep: Path, request: dict, profile: str | None) -> None:
     frame = (ep / "heygen/mark/frame.png").resolve()
     repair = (ep / "heygen/mark/repair.png").resolve()
     text = (
         f"heygen_mark 需要 Agent 用 flova 图像生成补出口播原片右下角（仓库 Python 调不了 MCP；只生图，不生成视频）：\n"
         f"    1. 读 {ep.as_posix()}/heygen/mark/flova_request.json（prompt / source_image / output_image / params）\n"
         f"    2. 调 flova-image 的 generate_image（model=gpt-image-2.5-sunburst）：prompt=request.prompt，"
-        f"参考图={frame}，参数 profile=\"{profile}\"、original=true；不要调 generate_video，不要换号\n"
+        f"参考图={frame}，参数按 request.params 传递，original=true；不要调 generate_video，已提交失败不重复提交\n"
         f"    3. 把返回的无水印原图保存为 {repair}\n"
         f"    4. 重跑 python pipeline/maphub/heygen_mark.py {ep.as_posix()}\n"
         f"    补图必须保持浅景深：人脸清楚，沙发角和旁边的垫子一样虚。蒙版只盖住右下角那块标。\n"
@@ -194,7 +194,7 @@ def run(ep: Path, force: bool) -> None:
         request = make_request(pinned_profile(load_json(req_p)))
         save_json(req_p, request)
         save_json(status_p, {"status": "pending", "request": "heygen/mark/flova_request.json"})
-        need_image(ep, request, request["params"]["profile"])
+        need_image(ep, request, request["params"].get("profile"))
     st = repair_p.stat()
     prev = load_json(status_p)
     if (not force and clean.is_file() and prev.get("status") == "done"

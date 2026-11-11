@@ -4,7 +4,7 @@
 
 ## 1. 本项目用它做什么
 
-`pipeline/stages/listing.py` 的 `listing:fetch` 阶段（`npm run listing:fetch`，也是 `npm run make` 的第 1 阶段）只读租赁房源。二手房、新房成片目前没有接到这个连接器；连接器上另有买卖查询，本仓库流水线不调用。
+`pipeline/common/crm_listing.py`（`python pipeline/common/crm_listing.py projects/listing/<ep>`，读 episode.yaml 的 `listing.ref`，写 `data/listing.json` 与 `data/listing_prospect.json`）只读租赁房源。旧 `pipeline/stages/listing.py` 与 `npm run make` 已于 2026-10-30 退役。二手房、新房成片目前没有接到这个连接器；连接器上另有买卖查询，本仓库流水线不调用。
 
 `CC_BASE_URL` 默认 `http://127.0.0.1:8020`，实际请求前缀是 `{CC_BASE_URL}/api/v1`。本阶段只打三个接口：
 
@@ -49,7 +49,7 @@
 
 ## 3. 从本机连到云端再取数
 
-代码默认访问本机 `127.0.0.1:8020`，而云端进程绑在服务器 loopback 上。保持下面的转发运行，再执行原来的 `listing:fetch`，不必改默认 `CC_BASE_URL`：
+代码默认访问本机 `127.0.0.1:8020`，而云端进程绑在服务器 loopback 上。保持下面的转发运行，再执行 `python pipeline/common/crm_listing.py projects/listing/<ep>`，不必改默认 `CC_BASE_URL`：
 
 ```
 ssh -N -L 8020:127.0.0.1:8020 beike-server
@@ -92,7 +92,7 @@ ssh -N -L 8020:127.0.0.1:8020 beike-server
 
 下架后实时接口不一定能补图：托管详情可能返回 `CRM_UPSTREAM_INVALID_INPUT`，实勘接口可能 200 且照片数为 0。要取这些仍留在归档里的 URL，由管理员在服务器上只读处理。Agent 不得拷贝整库，不得读取凭证。
 
-`listing.py` 给图片 URL 追加 `.1500x.jpg`：
+`crm_listing.py` 给图片 URL 追加 `.1500x.jpg`：
 
 - URL 已以 `.450x.jpg`、`.750x.jpg`、`.800x.jpg`、`.1500x.jpg` 结尾的，不再追加。
 - `img.ljcdn.com` 上的租赁图不加后缀通常仍能打开。
@@ -118,7 +118,7 @@ ssh -N -L 8020:127.0.0.1:8020 beike-server
 - `community`、`layout`、`area_sqm`、`monthly_rent_yuan`、`orientation`、`floor_desc` 缺失时写成 `待填`，合规检查失败。
 - `floor_desc` 若包含「室」「单元」「号楼」或 `#`，改成 `待填`；画面只说低/中/高楼层。
 - `listing_id` 只留在 `listing.json` 和 `wall_candidates.json`。`wall.json`、口播、字幕、画面不得出现 CRM 编号；编号与墙卡片的对应在 `raw/wall_map.json`，不进 Remotion。
-- 实勘只下载 `image_type` 为 `REAL` 的照片到 `raw/listing/`。manifest 里 CRM 图的 `watermarked` 默认 `null`，人工确认没有平台水印后才改为 `false`；有平台水印的不能用，也不能去水印。
+- 实勘只下载 `image_type` 为 `REAL` 的照片到本期 `sources/crm/`。manifest 里 CRM 图的 `watermarked` 默认 `null`，人工确认没有平台水印后才改为 `false`；有平台水印的不能用，也不能去水印。
 - MCP 业务工具默认每分钟 30 次（`CC_MCP_RATE_LIMIT_PER_MIN`）。成片取数以上述三个 HTTP 接口为准。
 
 ## 7. Agent 不得做的事
@@ -138,4 +138,4 @@ ssh -N -L 8020:127.0.0.1:8020 beike-server
 - `BeikeMicroservice/services/crm_connector/deploy/README.md`
 - `BeikeMicroservice/services/crm_connector/README.md`
 - `BeikeMicroservice/services/store_media/app/main.py`（8080 只代理 `/archive` 与 `/api/v1/archive/rental/status`）
-- `ReelEstate/pipeline/stages/listing.py`
+- `ReelEstate/pipeline/common/crm_listing.py`

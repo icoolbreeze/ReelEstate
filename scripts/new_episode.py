@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Create one map-hub 口播 episode folder.
+"""Create one listing (房源讲解) episode folder: rental, resale or new-home.
 
-Folder: projects/map-hub/epNN-<slug>
+Folder: projects/listing/epNN-<slug>
   ep08-xihu
   ep12-xihu
   ep10-yuedu
@@ -15,8 +15,13 @@ Omit --episode to take the next free series number.
 usage:
   python scripts/new_episode.py --category rental --slug xihu --listing <id> --title 小区名
   python scripts/new_episode.py --category new-home --slug xipai --title 楼盘名
-  python scripts/new_episode.py --category knowledge --slug yuedu --topic 选题
+  python scripts/new_episode.py --category new-home --slug bangtai --title 楼盘名 --footage D:\\DCIM\\DJI_001
   python scripts/new_episode.py --self-test
+knowledge is forwarded to pipeline/knowledge/new_episode.py.
+
+Only the folders every episode needs are created (footage/raw, data, consent, the category's
+footage/assets/* and, for new-home, sources/docs). work/, out/, voice/, heygen/, public/, annotations/ and
+footage/shots|heygen|matte|restored are created by the tool that first writes them. No data/project.json.
 """
 from __future__ import annotations
 
@@ -24,6 +29,7 @@ import argparse
 import json
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -32,19 +38,49 @@ for _s in (sys.stdout, sys.stderr):
     _s.reconfigure(encoding="utf-8", errors="replace")
 
 REPO = Path(__file__).resolve().parents[1]
-SERIES = REPO / "projects" / "map-hub"
-TEMPLATE = SERIES / "ep07-xihu" / "episode.json"
+SERIES = REPO / "projects" / "listing"
+TEMPLATE = REPO / "templates/listing/episode.json"
 CATS = ("rental", "resale", "new-home", "knowledge")
 LISTING_CATS = ("rental", "resale")
-NAME = re.compile(r"^(?P<room>[\u4e00-\u9fff]+)_(?P<n>\d{1,2})\.(mp4|mov|MP4|MOV)$")
+EPISODE_CATS = ("rental", "resale", "new-home")
+VIDEO_EXT = {".mp4", ".mov", ".m4v", ".mkv", ".mts"}
 SLUG = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 LAYOUT = re.compile(r"^[1-9]\d?b[1-9]\d?l$")
 ID_RE = re.compile(r"^ep(?P<ep>\d{2})-(?P<slug>[a-z][a-z0-9]*(?:-[a-z0-9]+)*)$")
 SLUG_BANNED = {"rental", "resale", "knowledge", "new", "home"}
-DIRS = (
-    "footage/raw", "footage/heygen", "voice", "heygen", "matte",
-    "annotations/seeds", "data", "public", "out", "jobs", "consent",
-)
+BASE_DIRS = ("footage/raw", "data", "consent")
+CATEGORY_DIRS = {
+    "rental": ("footage/assets/floorplan", "footage/assets/photos", "footage/assets/map"),
+    "resale": ("footage/assets/floorplan", "footage/assets/photos", "footage/assets/map"),
+    "new-home": ("footage/assets/brochure", "footage/assets/renderings", "footage/assets/sandtable",
+                 "footage/assets/map", "sources/docs"),
+}
+ASSET_README = {
+    "rental": ("- `floorplan/`：CRM 户型图原图、清理版、透明抠图、README\n"
+               "- `photos/`：采用的 Muse 增强图 `<room>_muse.png` + `sources.md`\n"
+               "- `map/`：采用的地图底图、POI 图片\n"),
+    "new-home": ("- `brochure/`：楼书页、户型页（开发商资料，注明来源）\n"
+                 "- `renderings/`：效果图、鸟瞰图（画面须标注“效果图”）\n"
+                 "- `sandtable/`：沙盘、区位图照片\n"
+                 "- `map/`：采用的地图底图、POI 图片\n"
+                 "开发商原始文件（docx/pdf/价格表）放 `sources/docs/`，只作核对依据。\n"),
+}
+ASSET_README["resale"] = ASSET_README["rental"]
+
+
+def listing_block(category: str, community: str) -> dict:
+    """episode.json listing facts per category; numbers stay null until verified."""
+    block = {"name": community, "community": community, "layout": "", "area": None}
+    if category == "rental":
+        block["rent"] = None                                    # 元/月
+    elif category == "resale":
+        block["price"] = {"total_wan": None, "unit_yuan_m2": None}
+    else:                                                       # new-home: 备案价/均价 + 有效期
+        block["price"] = {"unit_yuan_m2": None, "range": "", "valid_until": ""}
+    block.update(lnglat=None, coord="gcj02")
+    block["note"] = ("新房无房源编号。楼盘名已填，价格、面积待开发商资料回填。" if category == "new-home"
+                     else "数字待本期房源查询回填。模板里的示例数字已清空。")
+    return block
 
 
 def yq(value) -> str:
@@ -114,8 +150,8 @@ def resolve_spec(a) -> dict:
             )
         episode = a.episode if a.episode is not None else next_episode()
         category, slug, layout = a.category, a.slug, a.layout or ""
-    if category not in CATS:
-        raise SystemExit("类型只能是 rental、resale、new-home、knowledge")
+    if category not in EPISODE_CATS:
+        raise SystemExit("房源期类型只能是 rental、resale、new-home；knowledge 走 pipeline/knowledge/new_episode.py")
     if layout and not LAYOUT.fullmatch(layout):
         raise SystemExit("户型只写入 episode.yaml，形如 2b1l")
     folder = episode_id(episode, slug)
@@ -136,11 +172,6 @@ def resolve_spec(a) -> dict:
             raise SystemExit("新房不用 --topic，楼盘名写在 --title")
         if not title:
             raise SystemExit("新房要提供 --title 楼盘名")
-    else:
-        if listing:
-            raise SystemExit("知识和市场分析不绑房源编号，用 --topic")
-        if not topic:
-            raise SystemExit("知识和市场分析要提供 --topic 选题")
     return {
         "episode": episode,
         "category": category,
@@ -156,13 +187,10 @@ def resolve_spec(a) -> dict:
 
 
 def next_episode() -> int:
-    nums = []
-    if SERIES.is_dir():
-        for path in SERIES.glob("ep*"):
-            m = re.match(r"ep(\d+)", path.name)
-            if m:
-                nums.append(int(m.group(1)))
-    return (max(nums) + 1) if nums else 1
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    from pipeline.common.episodes import next_release_number
+    return next_release_number(REPO)
 
 
 def blank_template(tpl: dict, spec: dict) -> dict:
@@ -170,23 +198,11 @@ def blank_template(tpl: dict, spec: dict) -> dict:
     out["id"] = spec["id"]
     out["episodeTag"] = f"EP.{spec['episode']:02d}"
     out["category"] = spec["category"]
-    out["sampleData"] = True
-    out["sampleTag"] = "示例数据"
-    community = spec["title"]
-    out["listing"] = {
-        "name": community,
-        "community": community,
-        "layout": "",
-        "area": None,
-        "rent": None,
-        "lnglat": None,
-        "coord": "gcj02",
-        "note": (
-            "新房无房源编号。楼盘名已填，其余数字待资料回填。"
-            if spec["category"] == "new-home"
-            else "数字待本期房源查询回填。模板里的示例数字已清空。"
-        ),
-    }
+    out["sampleData"] = False    # all listings are real (CRM/Amap/developer facts); true only when the user asks for simulated data
+    out["sampleTag"] = ""
+    out["listing"] = listing_block(spec["category"], spec["title"])
+    out["plane"] = {"center": None, "zoom": 15, "k": 2.8125, "w": 1440, "h": 1080}
+    out["mapBase"] = {"file": "", "ext": [-640, -880, 2080, 1960], "credit": "", "builtBy": ""}
     for poi in out.get("poiQueries") or []:
         for key in ("query", "pick", "label", "sub"):
             if key in poi:
@@ -195,27 +211,26 @@ def blank_template(tpl: dict, spec: dict) -> dict:
 
 
 def write_yaml(ep: Path, spec: dict) -> None:
+    muse = "none" if spec["category"] == "new-home" else "auto"
     lines = [
         f"# episode.yaml — single source of truth for {spec['id']}. Edit this; grok reads it at every stage.",
         f"id: {spec['id']}",
-        "series: map-hub",
+        "series: listing",
+        "purpose: production",
+        f"release_number: {spec['episode']}",
         f"episode: {spec['episode']}",
-        f"category: {spec['category']}        # rental | resale | new-home | knowledge",
+        f"category: {spec['category']}        # rental | resale | new-home",
         "listing:",
         f"  ref: {yq(spec['listing'])}        # 租赁/二手房 CRM 编号。新房留空。不进目录名、口播、字幕、画面",
         f"  community: {yq(spec['title'])}",
         f"  city: {yq(spec['city'])}",
         f"  layout_slug: {yq(spec['layout'])}   # 户型记在这里，不进目录名",
-        "  sample_data: true          # true = 示例数据 (spoken once); false = live listing, follow rules/compliance",
-        f"topic: {yq(spec['topic'])}          # knowledge / 市场分析选题；房源期留空",
+        "  sample_data: false         # real listing: facts only from CRM / Amap / developer docs (rules/compliance). true only for user-requested simulated data",
         "footage:",
-        "  # raw footage in footage/raw/, named 房间_序号.mp4 (see docs/FOOTAGE-SPEC.md). Muse fills rooms with no raw clip.",
-        "  raw:",
-    ]
-    raw = spec.get("raw") or []
-    lines += [f"    - {{file: {yq(n)}, room: {r}, n: {k}, use: auto}}" for n, r, k in raw] or ["    []"]
-    lines += [
-        "  muse: auto                 # auto = generate missing rooms/scenes with Muse; none = raw only",
+        "  # camera originals: footage/raw/ (read-only, camera file names kept); room/shot mapping: footage/raw_manifest.json",
+        "  # restored Rec.709: footage/restored/{master,proxy}/ (npm run restore); render shots: footage/shots/<ID>.mp4",
+        "  manifest: footage/raw_manifest.json",
+        f"  muse: {muse}                 # auto = generate missing rooms/scenes with Muse; none = own footage only",
         "presenter: cool-breeze       # shared profile assets/presenter/<name>/presenter.yaml",
         "# voice reference stays in voices/clone/ (read-only). This episode's generated wavs stay in voice/.",
         "# presenter_override:",
@@ -232,35 +247,47 @@ def write_yaml(ep: Path, spec: dict) -> None:
     (ep / "episode.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
 
-def copy_raw(ep: Path, footage: str | None) -> tuple[list, list]:
-    raw, bad = [], []
+def copy_raw(ep: Path, footage: str | None) -> int:
+    """Copy camera clips as-is (any name, DJI names kept) into footage/raw/; the source is only read."""
     if not footage:
-        return raw, bad
+        return 0
+    n = 0
     for f in sorted(Path(footage).iterdir()):
-        if not f.is_file():
-            continue
-        m = NAME.match(f.name)
-        if m:
+        if f.is_file() and f.suffix.lower() in VIDEO_EXT and not f.name.startswith("."):
             shutil.copy2(f, ep / "footage" / "raw" / f.name)
-            raw.append((f.name, m["room"], int(m["n"])))
-        elif f.suffix.lower() in (".mp4", ".mov"):
-            bad.append(f.name)
-    return raw, bad
+            n += 1
+    return n
 
 
 def create(root: Path, spec: dict, template: Path) -> Path:
+    if spec["category"] not in EPISODE_CATS:
+        raise SystemExit("knowledge 走 pipeline/knowledge/new_episode.py")
     ep = root / spec["id"]
     if ep.exists():
         raise SystemExit(f"{ep} already exists — edit its episode.yaml instead")
-    for d in DIRS:
+    for d in BASE_DIRS + CATEGORY_DIRS[spec["category"]]:
         (ep / d).mkdir(parents=True)
-    spec["raw"], bad = copy_raw(ep, spec.get("footage"))
+    copied = copy_raw(ep, spec.get("footage"))
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    from pipeline.common.raw_manifest import init as init_manifest
+    init_manifest(ep, probe=bool(copied))
     tpl = json.loads(template.read_text(encoding="utf-8"))
     (ep / "episode.json").write_text(
         json.dumps(blank_template(tpl, spec), ensure_ascii=False, indent=1) + "\n",
         encoding="utf-8", newline="\n",
     )
     write_yaml(ep, spec)
+    compliance = json.loads((REPO / "templates/listing/compliance.example.json").read_text(encoding="utf-8"))
+    compliance.update(id=spec["id"], category=spec["category"], title=spec["title"] or "待填")
+    category_key = {"rental": "rental", "resale": "resale", "new-home": "new_home"}[spec["category"]]
+    for field in ("rental", "resale", "new_home"):
+        if field != category_key:
+            compliance.pop(field, None)
+    if spec["category"] != "rental":
+        compliance["price"].update(type="待填", unit="待填")
+    compliance["property"]["location"].update(city=spec["city"], community=spec["title"])
+    (ep / "compliance.json.draft").write_text(json.dumps(compliance, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     if spec["category"] in LISTING_CATS:
         ref = {
             "listing_id": spec["listing"],
@@ -274,40 +301,27 @@ def create(root: Path, spec: dict, template: Path) -> Path:
             json.dumps(ref, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n",
         )
         id_line = "房源编号只在 `episode.yaml` 的 `listing.ref` 和 `data/listing_ref.json`。\n"
-    elif spec["category"] == "new-home":
-        project = {
-            "category": "new-home",
-            "project_name": spec["title"],
-            "city": spec["city"],
-            "slug": spec["slug"],
-            "listing_id": None,
-            "source": "user",
-        }
-        (ep / "data" / "project.json").write_text(
-            json.dumps(project, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n",
-        )
-        id_line = "新房没有房源编号。楼盘名在 `listing.community` 和 `data/project.json`。\n"
     else:
-        topic = {"category": "knowledge", "topic": spec["topic"], "slug": spec["slug"], "source": "user"}
-        (ep / "data" / "topic.json").write_text(
-            json.dumps(topic, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n",
-        )
-        id_line = "本期是选题，没有房源编号。选题在 `topic` 和 `data/topic.json`。\n"
+        id_line = "新房没有房源编号。楼盘名在 `episode.yaml` 的 `listing.community`；开发商资料放 `sources/docs/`。\n"
     (ep / "consent" / "README.md").write_text(
         "# 本期授权\n\n业主委托或本期单独授权放这里。声音克隆参考音在 `voices/clone/`，不要复制进来。\n",
         encoding="utf-8", newline="\n",
     )
+    (ep / "footage" / "assets" / "README.md").write_text(
+        f"# {spec['id']} 素材（{spec['category']}）\n\n只放已采用的成品，试验留在 `out/drafts/`。规范见 docs/CONVENTIONS-shared.md §6a。\n\n"
+        + ASSET_README[spec["category"]]
+        + "原始视频在 `footage/raw/`（只读），对应关系在 `footage/raw_manifest.json`。\n",
+        encoding="utf-8", newline="\n",
+    )
     (ep / "README.md").write_text(
         f"# {spec['id']}\n\n"
-        f"map-hub 口播（{spec['category']}）。依据是 `episode.yaml`。\n"
+        f"房源讲解（{spec['category']}）。依据是 `episode.yaml`。\n"
         f"{id_line}"
-        f"共用声音与数字人：`voices/clone/`、`assets/presenter/cool-breeze/`。\n"
+        f"目录规范：docs/FOOTAGE-SPEC.md。共用声音与数字人：`voices/clone/`、`assets/presenter/cool-breeze/`。\n"
         f"做片：对 grok 说 `做视频 {spec['id']}`，或运行 `scripts\\make-video.cmd {spec['id']}`。\n",
         encoding="utf-8", newline="\n",
     )
-    print(f"created {ep}  raw clips: {len(spec['raw'])}")
-    if bad:
-        print("NOT copied (bad names, rename to 房间_序号.mp4):", ", ".join(bad))
+    print(f"created {ep}  raw clips: {copied}")
     print(f"next:  做视频 {spec['id']}   |   scripts\\make-video.cmd {spec['id']}")
     return ep
 
@@ -315,7 +329,7 @@ def create(root: Path, spec: dict, template: Path) -> Path:
 def self_test() -> None:
     assert episode_id(8, "xihu") == "ep08-xihu"
     assert episode_id(12, "xihu") == "ep12-xihu"
-    assert split_id("ep07-xihu") == (7, "xihu")
+    assert split_id("ep07-demo") == (7, "demo")
     assert leaks_listing("ep08-id99887766", 8, "99887766")
     assert not leaks_listing("ep08-xihu", 8, "99887766")
     for bad in ("rental-xihu", "xihu-2b1l", "new-home-xipai"):
@@ -330,7 +344,7 @@ def self_test() -> None:
         spec = {
             "episode": 8, "category": "rental", "slug": "xihu", "layout": "2b1l",
             "id": "ep08-xihu", "listing": "99887766", "topic": "",
-            "title": "西湖文化广场", "city": "杭州", "footage": None,
+            "title": "西湖文化广场", "city": "成都", "footage": None,
         }
         ep = create(root, spec, TEMPLATE)
         yaml_text = (ep / "episode.yaml").read_text(encoding="utf-8")
@@ -345,25 +359,35 @@ def self_test() -> None:
         assert "rental" not in ep.name
         assert "西湖文化广场站" not in episode_text
         assert '"rent": null' in episode_text
-        know = {
-            "episode": 10, "category": "knowledge", "slug": "yuedu", "layout": "",
-            "id": "ep10-yuedu", "listing": "", "topic": "月度租金怎么看",
-            "title": "", "city": "杭州", "footage": None,
-        }
-        kep = create(root, know, TEMPLATE)
-        assert (kep / "data" / "topic.json").is_file()
-        assert not (kep / "data" / "listing_ref.json").exists()
+        assert (ep / "footage/assets/floorplan").is_dir() and not (ep / "footage/listing").exists()
+        for lazy in ("heygen", "matte", "jobs", "public", "out", "voice", "annotations", "footage/heygen"):
+            assert not (ep / lazy).exists(), lazy
+        assert json.loads((ep / "footage/raw_manifest.json").read_text(encoding="utf-8"))["clips"] == []
+        cam = root / "card"
+        cam.mkdir()
+        (cam / "DJI_20261030111005_0271_D.MP4").write_bytes(b"")
+        (cam / "DJI_20261030111005_0271_D.LRF").write_bytes(b"")
         home = {
             "episode": 11, "category": "new-home", "slug": "xipai", "layout": "",
             "id": "ep11-xipai", "listing": "", "topic": "",
-            "title": "武侯西派御府", "city": "成都", "footage": None,
+            "title": "武侯西派御府", "city": "成都", "footage": str(cam),
         }
         hep = create(root, home, TEMPLATE)
-        project = json.loads((hep / "data" / "project.json").read_text(encoding="utf-8"))
-        assert project["project_name"] == "武侯西派御府"
-        assert project["listing_id"] is None
-        assert hep.name == "ep11-xipai"
+        payload = json.loads((hep / "episode.json").read_text(encoding="utf-8"))
+        assert "rent" not in payload["listing"] and payload["listing"]["price"]["unit_yuan_m2"] is None
+        assert payload["listing"]["community"] == "武侯西派御府"
+        assert not (hep / "data" / "project.json").exists()
         assert not (hep / "data" / "listing_ref.json").exists()
+        for d in ("footage/assets/brochure", "footage/assets/renderings", "footage/assets/sandtable", "footage/assets/map", "sources/docs"):
+            assert (hep / d).is_dir(), d
+        assert (hep / "footage/raw/DJI_20261030111005_0271_D.MP4").is_file()
+        assert not (hep / "footage/raw/DJI_20261030111005_0271_D.LRF").exists()
+        manifest = json.loads((hep / "footage/raw_manifest.json").read_text(encoding="utf-8"))
+        assert [c["file"] for c in manifest["clips"]] == ["DJI_20261030111005_0271_D.MP4"]
+        assert "muse: none" in (hep / "episode.yaml").read_text(encoding="utf-8")
+        hj = json.loads((hep / "episode.json").read_text(encoding="utf-8"))
+        assert hj["sampleData"] is False and hj["sampleTag"] == "" and "sample_data: false" in (hep / "episode.yaml").read_text(encoding="utf-8")
+        assert hep.name == "ep11-xipai"
         refused = argparse.Namespace(
             id="", episode=11, category="new-home", slug="xipai", layout="",
             listing="123456", topic="", title="武侯西派御府", city="成都", footage=None,
@@ -387,16 +411,26 @@ def main() -> None:
     ap.add_argument("--listing", default="", help="CRM listing id; required for rental and resale; never for new-home")
     ap.add_argument("--topic", default="", help="knowledge / market topic; required for knowledge")
     ap.add_argument("--title", default="", help="Chinese community or 楼盘 name; required for new-home")
-    ap.add_argument("--city", default="杭州")
-    ap.add_argument("--footage", help="folder of raw clips named 房间_序号.mp4")
+    ap.add_argument("--city", default="成都")
+    ap.add_argument("--footage", help="folder of camera clips (any names, e.g. DJI_*_D.MP4); copied as-is into footage/raw/")
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args()
     if a.self_test:
         self_test()
         return
+    if a.category == "knowledge":
+        forwarded = ["--slug", a.slug, "--topic", a.topic, "--city", a.city]
+        for flag, value in (("--id", a.id), ("--episode", a.episode), ("--title", a.title)):
+            if value is not None and str(value):
+                forwarded += [flag, str(value)]
+        if a.listing:
+            raise SystemExit("knowledge does not accept --listing")
+        raise SystemExit(subprocess.call([sys.executable, str(REPO / "pipeline/knowledge/new_episode.py"), *forwarded]))
     spec = resolve_spec(a)
     create(SERIES, spec, TEMPLATE)
 
 
 if __name__ == "__main__":
     main()
+
+

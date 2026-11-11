@@ -4,16 +4,16 @@
 Map-driven talking-head episode for @贝壳-TV: opener (multiplane → scan → dolly zoom) lands on an illustrated Amap base map; a named cursor clicks map marks (样板间 photo cards / 小区环境 pin / 配套 POIs) to open each segment; B-roll inside segments carries scanline-annotate-focus tracking marks. Read `series/map-hub/rules/RULES.md` before changing anything visual, and `rules/mediastorm_koubo.md` for the 口播 numbers.
 
 **Make a new episode**
-1. Copy `episodes/ep07-xihu/` to `episodes/<id>/`; edit `episode.json` (listing lnglat in GCJ-02, `plane.center`, `poiQueries` with exact Amap names to `pick`). Listing facts stay marked 示例数据 until the real archive is connected.
+1. Copy `episodes/ep07-xihu/` to `episodes/<id>/`; edit `episode.json` (listing lnglat in GCJ-02, `plane.center`, `poiQueries` with exact Amap names to `pick`). Listings are real (`sampleData: false`, `sampleTag: ""`); no 示例数据 label unless the user explicitly asks for simulated data.
 2. `python pipeline/amap_fetch.py episodes/<id>/episode.json` — real POIs + route distances. Never invent distances or walking times.
 3. Write `script.json` (lines: `layout` OPENER|A|PIP|B, `clip`, `cam`, `enter` = mark clicked before the line, `poi`, `cap` chunks, `tts`) and `shots.json` (Muse shots + annotate targets).
-4. `python pipeline/build_vo.py episodes/<id>` → timeline + mix; `python pipeline/make_muse_batches.py episodes/<id> --out muse` → paste `muse/batchN.txt` into Muse; save downloads as `footage/<ID>.mp4`.
+4. `python pipeline/build_vo.py episodes/<id>` → timeline + mix; `python pipeline/make_muse_batches.py episodes/<id> --out muse` → paste `muse/batchN.txt` into Muse; save downloads as `footage/shots/<ID>.mp4`.
 5. Per B-roll clip: `track_annotations.py grid` → write `annotations/seeds/<ID>.json` from the grid image → `track_annotations.py track --preview` → check the preview.
 6. `python pipeline/sync_assets.py episodes/<id>` then `cd proj && npx remotion render src/index.ts MapHubKoubo ../out/<id>.mp4 --gl=angle`.
 
 **Rules for agents**
 - Keys: map-tools reads `~/.config/map-tools/keys.json`; never print, copy or commit keys.
-- Compliance: distances only from Amap routes; no walking-time claims on screen, no 最/第一, no 学区 promises; AI footage labelled; 示例数据 tag always on.
+- Compliance: distances only from Amap routes; no walking-time claims on screen, no 最/第一, no 学区 promises; AI footage labelled; 示例数据 tag only when sampleData === true.
 - flova (gpt-image-2.5) runs only on the user's PC through its local MCP server (`pipeline/flova/flova_edit.js`, `$FLOVA_MCP_SERVER`, profile `$FLOVA_PROFILE`); one call per edit, `original:true`; no video generation unless the user asks; never touch invite/credit-farming scripts.
 - Map edits by GPT must be re-aligned to Amap geometry (`pipeline/flova/align.py`) before use; the route must stay on roads.
 - Muse presenter clips are not lip-synced: keep them muted, voice = TTS.
@@ -41,11 +41,11 @@ Map-driven talking-head episode for @贝壳-TV: opener (multiplane → scan → 
 ## Rules (HeyGen avatar)
 - Avatar on camera only on A/PIP lines + hook; HeyGen render <= 55 s (free plan 60 s): one 16:9 render lip-synced to OUR audio, split by heygen_plan.py.
 - Label "AI数字人 · AI合成声音" whenever the avatar is on screen, and once on the end card. Never use HeyGen/Muse audio in the mix.
-- Hook 3-5 s, listing highlights only, 示例数据 tag on screen, hard cut into the opener; opener timing/text unchanged.
+- Hook 3-5 s, listing highlights only (示例数据 tag only when sampleData === true), hard cut into the opener; opener timing/text unchanged.
 
 ## Rules (v3)
 - Hook shows listing highlights as cards beside the avatar; don't repeat the hook in the opener/first line.
-- Ending = summary panel (account, every highlight, franchise brands 链家/德佑/富房/CENTURY 21/中环) with the avatar in small PiP + the AI数字人/AI合成声音/示例数据 line.
+- Ending = summary panel (account, every highlight, franchise brands 链家/德佑/富房/CENTURY 21/中环) with the avatar in small PiP + the AI数字人/AI合成声音 line (示例数据 only when sampleData === true).
 - Brand logos: official source recorded in brands.md, extracted uncropped; a typeset placeholder must be flagged `placeholder: true` and replaced before publishing.
 
 ## Rules (v4)

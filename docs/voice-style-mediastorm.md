@@ -29,7 +29,7 @@ vlog 对照：6.0 字/秒，变异系数 0.13，停顿约 0.56 s（更松、更�
 ## F5 落地方法
 - 每句拆成分句，逐分句合成，每分句给 speed（1.10 过渡 / 1.05 叙述 / 0.95–1.0 关键信息）。
 - 裁掉每段首尾静音，按规则 2 插入实测停顿，整句 −16 LUFS。
-- 脚本：`projects/map-hub/ep07-xihu/voice/compare/ms_f5_script.json`（分句 + speed），拼接参数见 box `/workspace/voice/ms/phrases.json`、`build.py`。
+- 脚本：`projects/listing/ep07-xihu/voice/compare/ms_f5_script.json（ep07 测试期已删除，仅存档说明）`（分句 + speed），拼接参数见 box `/workspace/voice/ms/phrases.json`、`build.py`。
 
 ## 聊天感停顿规则（2026-10-12，phone ref 版）
 用户反馈：要“像聊天”，不要念稿式的均匀停顿。

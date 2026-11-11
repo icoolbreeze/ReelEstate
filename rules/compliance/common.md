@@ -2,13 +2,13 @@
 
 > 整理自 `rules/reference/platform-rules-checklist.md` 与 `rules/reference/official-guidance.md`（2026-09-27 整理）。
 > 不是法律意见；平台规则会更新，发布前以平台最新版本为准。标「二手来源」「待核实」的条目未读到官方原文。
-> 机器可检查的部分由 `pipeline/check/check.py` 执行；其余靠发布前自检（`rules/workflow.md`）。
+> 机器可检查的部分由 `pipeline/check/check.py` 执行；其余靠发布前自检（`docs/PRODUCTION.md`「正式输出」）。
 
 ## 1. 视频号《房地产行业公约》（2026-05-07 修订，**2026-05-12 生效**）— 最高优先级
 
 介绍具体房源/楼盘时，**视频内或标题中**必须写明（check.py 强制，InfoBar 常驻显示）：
 
-| 必填 | project.json 字段 |
+| 必填 | compliance.json 字段 |
 |---|---|
 | 房产类型 | `property.property_type` |
 | 建筑面积（或明确标注套内建筑面积） | `property.area.type` + `property.area.value` |
@@ -66,12 +66,12 @@
 - 抖音：发布页 → 高级设置 → 发文助手自主声明 → 内容由AI生成。视频号：发表页 → 添加标注 → 含AI生成内容。
 - AI 配音/声音克隆：取得本人**单独书面同意**（《互联网信息服务深度合成管理规定》第14、17、18条）。https://www.cac.gov.cn/2022-12/11/c_1672221949354811.htm
 - 不得 AI 仿冒明星/名人声音。AI 装修/补景画面同时算效果图：既标 AI，又标“效果图/非实景”。
-- `project.json` 中 `ai_voice: true`（TTS 脚本自动设置）→ check 报告追加“发布时勾选 AI 标注”提醒，画面角标显示“含AI合成配音”。
+- `compliance.json` 中 `ai_voice: true`（克隆/AI 配音时必须标记）→ check 报告追加“发布时勾选 AI 标注”提醒，画面角标显示“含AI合成配音”。
 
 ## 6. 广告标识
 
 - 替开发商/业主推广、收推广费、挂购买/留资入口的视频属于广告，需**显著标明“广告”**（《广告法》第14条；《互联网广告管理办法》第9条 https://www.gov.cn/zhengce/202305/content_6858084.htm ）。抖音商单走巨量星图。
-- `project.json` 中 `ad_disclosure: true` → 画面角标显示“广告”。
+- `compliance.json` 中 `ad_disclosure: true` → 画面角标显示“广告”。
 
 ## 7. 原创与质量
 

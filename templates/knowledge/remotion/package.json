@@ -1,0 +1,25 @@
+{
+ "name": "knowledge-koubo",
+ "version": "1.0.0",
+ "private": true,
+ "dependencies": {
+  "@remotion/bundler": "^4.0.529",
+  "@remotion/cli": "4.0.529",
+  "@remotion/fonts": "4.0.529",
+  "@remotion/motion-blur": "^4.0.529",
+  "@remotion/renderer": "^4.0.529",
+  "@tabler/icons": "^3.48.0",
+  "react": "19.2.3",
+  "react-dom": "19.2.3",
+  "remotion": "4.0.529"
+ },
+ "devDependencies": {
+  "@types/react": "19.2.7",
+  "typescript": "5.9.3"
+ },
+ "scripts": {
+  "studio": "remotion studio src/index.ts",
+  "render": "remotion render src/index.ts KnowledgeKoubo ../out/draft.mp4 --gl=angle",
+  "typecheck": "tsc --noEmit -p ."
+ }
+}

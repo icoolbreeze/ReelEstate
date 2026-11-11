@@ -11,18 +11,23 @@
 - 两种验证同时出现时先等用户滑完滑块，再处理复选框。
 
 用法:
-    python invite_manual.py 4
+    python invite_manual.py [N]
+    python invite_manual.py --profile <profile> [N]
+
+省略 --profile 时仍用账本里的活跃母号。
 """
 from __future__ import annotations
 
+import argparse
 import json
+import re
 import sys
 import time
 from pathlib import Path
 
 import flova_invite as fi
 import flova_pricing as fp
-from invite_batch import pick_fresh
+from invite_batch import email_for_profile, pick_fresh
 
 HUMAN_WAIT_SEC = 900          # 单个滑块验证人工等待上限
 TURNSTILE_MAX_RELOADS = 3     # Turnstile 复选框未签发 token 时最多刷新次数
@@ -163,18 +168,38 @@ def turnstile_decision(*, checkbox: bool, token: bool, slide: bool,
     return "refresh"
 
 
+def restore_window(page) -> None:
+    """把浏览器窗口恢复到前台。
+
+    后台最小化模式（FLOVA_VB_WINDOW=minimized，默认）下需要人工滑验证码时调用；
+    窗口已是前台时是幂等的空操作，失败静默（不阻塞验证码等待）。
+    """
+    try:
+        cdp = page.context.new_cdp_session(page)
+        w = cdp.send("Browser.getWindowForTarget")
+        cdp.send("Browser.setWindowBounds",
+                 {"windowId": w["windowId"],
+                  "bounds": {"windowState": "normal"}})
+        page.bring_to_front()
+    except Exception:
+        pass
+
+
 def settle_captcha(page, label: str = "", *, settle_window: float = 10.0,
                    human_timeout: float = float(HUMAN_WAIT_SEC)) -> None:
     """轮询等待拼图弹窗（含延迟弹出）；一旦出现就等人工滑过。
 
     弹窗未出现时持续观察 settle_window 秒；滑过后重新开窗，防止连弹。
+    后台最小化模式下先把窗口恢复到前台再等人工。
     """
     announced = False
     quiet_until = time.time() + settle_window
     while True:
         if captcha_mask_visible(page):
             if not announced:
-                print(f"  ⏳ 请在弹出的浏览器窗口人工滑动拼图验证码{('（' + label + '）') if label else ''}，"
+                restore_window(page)
+                print(f"  ⏳ 已把浏览器窗口调到前台，请人工滑动拼图验证码"
+                      f"{('（' + label + '）') if label else ''}，"
                       "滑过后自动继续 …", flush=True)
                 announced = True
             t0 = time.time()
@@ -273,11 +298,31 @@ def submit_email_and_otp(page, email: str, mailbox_key: str, *,
     fi._click_text(page, "Continue with Email")
     settle_captcha(page, "提交邮箱后")
 
-    on_otp = page.evaluate(
-        "[...document.querySelectorAll('input')].some(e => e.type === 'text' && e.maxLength === 6)"
-    )
+    otp_deadline = time.time() + 30.0
+    on_otp = False
+    while time.time() < otp_deadline:
+        if captcha_mask_visible(page):
+            settle_captcha(page, "提交邮箱后滑块")
+            otp_deadline = time.time() + 30.0
+        on_otp = bool(page.evaluate(
+            "[...document.querySelectorAll('input')].some(e => e.type === 'text' && e.maxLength === 6)"
+        ))
+        if on_otp:
+            break
+        time.sleep(0.5)
     if not on_otp:
-        raise RuntimeError("did not reach OTP page")
+        diag = {}
+        try:
+            diag = page.evaluate("""() => ({
+                text: (document.body.innerText || '').slice(0, 400),
+                inputs: [...document.querySelectorAll('input')].map(i => ({name: i.name, type: i.type, max: i.maxLength, val: i.value})),
+                alerts: [...document.querySelectorAll('[role=alert], .error, [class*="error"], [class*="alert"]')].map(e => (e.innerText || '').trim()).filter(Boolean)
+            })""")
+            print(f"  [DIAG] 未进入OTP页面，页面状态: {json.dumps(diag, ensure_ascii=False)}", flush=True)
+            page.screenshot(path="tmp/otp_fail.png")
+        except Exception as e:
+            print(f"  [DIAG] dump failed: {e}", flush=True)
+        raise RuntimeError(f"did not reach OTP page (page text: {repr(diag.get('text', '')[:100])})")
 
     code = fi._poll_otp(mailbox_key, time.time())
     n = page.evaluate(
@@ -306,25 +351,18 @@ def submit_email_and_otp_manual(page, email: str, mailbox_key: str,
 
 
 def register_one(mother_profile: str, mailbox: dict, profile_name: str,
-                 worker: tuple, inviter_email: str) -> dict:
-    worker_id, port, worker_dir = worker
-    code = fi.invite_snapshot(mother_profile)["promotion_code"]
-    if not code:
-        return {"ok": False, "reason": "no_promotion_code",
-                "child_email": mailbox["address"]}
-
-    kernel = fi.find_vb_kernel()
-    worker_dir.mkdir(parents=True, exist_ok=True)
-    invite_url = f"https://www.flova.ai/?refCode={code}"
-    proc = fi.subprocess.Popen(
-        [str(kernel), f"--user-data-dir={worker_dir}", f"--worker-id={worker_id}",
-         "--no-first-run", "--no-default-browser-check",
-         f"--remote-debugging-port={port}"],
-        stdout=fi.subprocess.DEVNULL, stderr=fi.subprocess.DEVNULL,
-    )
+                 worker: fi.Worker, inviter_email: str) -> dict:
+    worker_id = worker.id
+    invite_url = ""
     child_token = None
     signup_err = None
     try:
+        code = fi.invite_snapshot(mother_profile)["promotion_code"]
+        if not code:
+            return {"ok": False, "reason": "no_promotion_code",
+                    "child_email": mailbox["address"]}
+        invite_url = f"https://www.flova.ai/?refCode={code}"
+        port = fi.launch_worker(worker_id)
         fi.wait_cdp(port)
         time.sleep(2)
         from playwright.sync_api import sync_playwright
@@ -352,21 +390,33 @@ def register_one(mother_profile: str, mailbox: dict, profile_name: str,
 
             fi.adopt_web_session(profile_name, ctx, expected_email=mailbox["address"],
                                  playwright=p)
-            tok = ctx.request.post(
-                "https://service.flova.ai/api/agent/v2/token",
-                headers={"content-type": "application/json"},
-                data=json.dumps({"name": f"manual-{int(time.time())}"}),
-            )
-            child_token = (tok.json().get("data") or {}).get("token")
+            try:
+                import repair_cli
+                child_token = repair_cli._mint_token_in_page(
+                    page, f"manual-{int(time.time())}")
+            except Exception:
+                child_token = None
             browser.close()
     finally:
-        proc.terminate()
+        fi.stop_worker(worker_id)
+
+    if not child_token and mailbox.get("address"):
         try:
-            proc.wait(timeout=8)
-        except Exception:
-            proc.kill()
+            import repair_cli
+            rep = repair_cli.repair(profile_name)
+            if rep.get("ok"):
+                return {"ok": True, "reason": "keyed",
+                        "child_email": mailbox["address"],
+                        "child_profile": profile_name}
+        except Exception as exc:
+            signup_err = str(exc)[:240]
 
     if not child_token:
+        # 只要成功采纳了网页会话，也必须作为 web_session 记录入账
+        if mailbox.get("address"):
+            return {"ok": True, "reason": "web_session",
+                    "child_email": mailbox["address"],
+                    "child_profile": profile_name}
         return {"ok": False, "reason": "token_missing",
                 "child_email": mailbox["address"]}
     fi._add_cli_profile(profile_name, child_token)
@@ -374,15 +424,38 @@ def register_one(mother_profile: str, mailbox: dict, profile_name: str,
             "child_profile": profile_name}
 
 
-def main(n: int) -> None:
-    inviter_email = mother_email()
+def parse_args(argv: list[str] | None = None) -> tuple[int, str | None]:
+    parser = argparse.ArgumentParser(description="Invite-register N children one at a time")
+    parser.add_argument("n", nargs="?", type=int, default=4)
+    parser.add_argument("--profile", default="")
+    args = parser.parse_args(argv)
+    if args.n < 1:
+        parser.error("n must be >= 1")
+    profile = args.profile.strip() or None
+    if profile and not re.fullmatch(r"[A-Za-z0-9._-]+", profile):
+        parser.error("invalid profile")
+    return args.n, profile
+
+
+def cli_invocation(argv: list[str] | None = None) -> dict:
+    """解析命令行。不注册。省略 --profile 时 mother_profile 为 None，main 再取活跃母号。"""
+    count, profile = parse_args(argv)
+    if profile:
+        return {"n": count, "mother_profile": profile}
+    return {"n": count, "mother_profile": None}
+
+
+def main(n: int, mother_profile: str | None = None) -> None:
+    if mother_profile is None:
+        mother_profile = fi.active_mother_profile()
+        inviter_email = mother_email()
+        print("active_mother_profile:", mother_profile)
+    else:
+        inviter_email = email_for_profile(mother_profile)
+        print("mother_profile:", mother_profile)
     # prod 余额查询打桩（子号付款，不需要母号余额）。
     _orig_balance = fp.get_balance
     fp.get_balance = lambda p: 0.0 if str(p) == "prod" else _orig_balance(p)
-
-    # 快照和注册都走账本里的活跃母号（不写死 prod）。
-    mother_profile = fi.active_mother_profile()
-    print("active_mother_profile:", mother_profile)
 
     # 邀请码串行预热一次并缓存。
     snap0 = fi.invite_snapshot(mother_profile)
@@ -391,12 +464,19 @@ def main(n: int) -> None:
 
     mailboxes = pick_fresh(n)
     profiles = fi.next_child_profiles(n)
-    workers = fi.next_workers(n)
+    # 串行注册：按槽位轮转复用后端 worker 池；每个 register_one 结束都会
+    # stop_worker，下一个才启动，因此同一个 VB worker id（同一 user-data-dir）不会被
+    # 并发打开两次。VB 无 AdsPower 的池大小/每日限额，唯一约束是同 id 不并发。
+    pool = fi.next_workers(n)
+    if not pool:
+        raise RuntimeError(f"no {fi.browser_backend()} worker available in pool")
+    workers = [pool[i % len(pool)] for i in range(n)]
 
     results = []
     with fi._Lock(fi.LOCK_PATH):
         for mb, prof, wk in zip(mailboxes, profiles, workers):
-            print(f"== 注册 {prof} | {mb['address']} | worker {wk[0]}", flush=True)
+            print(f"== 注册 {prof} | {mb['address']} | {fi.browser_backend()} {wk.id}",
+                  flush=True)
             r = register_one(mother_profile, mb, prof, wk, inviter_email)
             print("   ->", "OK" if r.get("ok") else r.get("reason"), flush=True)
             results.append(r)
@@ -411,4 +491,4 @@ def main(n: int) -> None:
 
 
 if __name__ == "__main__":
-    main(int(sys.argv[1]) if len(sys.argv) > 1 else 4)
+    main(**cli_invocation())

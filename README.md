@@ -1,54 +1,43 @@
 # ReelEstate
 
-房产讲解视频生产仓库：**Remotion（Node）+ Python 流水线**，面向抖音与微信视频号。
-科普/讲解风格，真人口播（全屏 ↔ 小窗 PiP 切换）+ Canva 信息卡 + 动效，可选 AI 配音（[qwentts.cpp](https://github.com/ServeurpersoCom/qwentts.cpp)）。
+房产视频生产工程：Python 流程编排 + Remotion 渲染。正式内容分为房源讲解、知识口播和小ONE会客厅，发布期号统一分配。只支持 episode.yaml 工程；[跨 agent 生产交接](docs/PRODUCTION.md) 是现行操作入口。
 
-- 默认导出 4:3 横版 **1440×1080**，可选 **1080×1440（3:4）**、**1080×1920（9:16）**
-- 分类：`rental` 租赁 / `resale` 二手房 / `new-home` 新房
-- 内置合规检查（视频号房地产行业公约、广告法、房地产广告发布规定等），不通过不能渲染
+**项目用途：仅限非商业用途（用户于 2026-10-31 明确）。** 素材与服务接入按非商业使用条件选择，可采用允许非商业使用的音效、音乐、字体、图片和第三方代码，不要求额外商用授权。署名、再分发及服务条款仍按原许可执行；统一规则见[共用制作规范 §0](docs/CONVENTIONS-shared.md#0-项目用途与素材许可)。
 
-> 所有 Agent（Codex / Claude Code / OpenCode）请先读 [AGENTS.md](AGENTS.md)。
+| 路径 | 用途 |
+|---|---|
+| `projects/listing/` | 房源期；`category` 区分 rental / resale / new-home；`_sources/` 放未建期的原始资料；期内目录见 docs/FOOTAGE-SPEC.md |
+| `projects/knowledge/` | 知识、政策、市场分析期 |
+| `projects/interview/` | 小ONE会客厅；`series: interview` |
+| `pipeline/common/` | 工作区、配音设置、字幕对齐、HeyGen 计划、媒体同步、存储管理 |
+| `templates/shared/remotion/src/` | 字体、标签位图、跟踪平滑、连线、品牌条、角标及共用媒体组件 |
+| `templates/shared/public/` | 公共字体、品牌、平台图标；旧 shared/public 路径保留兼容 |
+| `tools/remotion/` | 房源、知识类和会客厅共用的 Node 依赖和锁文件 |
+| `templates/map-hub/remotion/` | 房源镜头编排；map-hub 是模板名称 |
+| `templates/knowledge/remotion/` | 知识类镜头编排 |
+| `templates/interview/remotion/` | 小ONE会客厅镜头编排 |
+| `templates/listing/` | 独立的新建模板与发布资料格式，不依赖任何测试视频 |
 
-## 环境要求
-
-Windows 10/11，Node 22+，Python 3.11+，ffmpeg/ffprobe，git。编译 TTS 另需 VS 2022 + CUDA 12.x + cmake + ninja。
-
-## 快速开始
+## 常用入口
 
 ```powershell
-git clone --recursive https://github.com/icoolbreeze/ReelEstate.git
-cd ReelEstate
-copy .env.example .env          # 按本机路径修改
-npm run setup                   # 安装 remotion 依赖
-
-# 看示例
-npm run check -- projects/_example
-npm run still -- projects/_example            # 单帧 PNG → projects/_example/output/
-npm run render -- projects/_example --ratio 4x3
-
-# 新建一个租赁项目
-npm run new -- rental lvcheng-2b1l            # → projects/rental/2026-xx-xx-lvcheng-2b1l
-npm run check -- projects/rental/2026-xx-xx-lvcheng-2b1l
+npm run doctor
+npm run setup
+npm run episodes
+npm run typecheck
+npm run check -- projects/listing/ep02-zidong --draft
+npm run still -- projects/listing/ep02-zidong --draft --frame 510 --ver review
+npm run render -- projects/listing/ep02-zidong --draft --ver roughcut_v9
+npm run storage:audit
+npm run storage:compact -- projects/listing/ep02-zidong
+# 先审阅计划，再应用；原始素材与授权资料不在清理范围内。
+npm run storage:compact -- projects/listing/ep02-zidong --apply --report tmp/storage-ep02.json
 ```
 
-（可选）编译 AI 配音：`scripts\build-tts.cmd`，详见 [docs/tts.md](docs/tts.md)。
+`check/render/still` 根据 episode.yaml 的 `series` 进入房源、知识或会客厅流程。未知 series 会报错。旧 project.json 项目不再接收，也不再保留独立的旧渲染环境。正式片仍需原有合规、素材、字幕、抠像、运动与人工审片通过。会客厅默认用现场同期声，不用 HeyGen、TTS 或变速。
 
-## 目录
+各期 `work/remotion` 保留独立数据、public 和代码快照；每次 stage 会同步公共修复。依赖通过目录联接共享，不逐期安装。已导出的 MP4 需要重新渲染才能继承代码修复。
 
-| 路径 | 说明 |
-|---|---|
-| `rules/` | 合规、风格、流程规则（中文） |
-| `remotion/` | Remotion 4 渲染工程 |
-| `pipeline/` | Python：新建、TTS、检查、渲染 |
-| `templates/` | 各分类 `project.json` 模板 |
-| `projects/` | 房源项目（私有，不提交；仅 `_example`） |
-| `voices/` | 音色预设与克隆参考（私有） |
-| `vendor/qwentts.cpp` | TTS 子模块 |
-| `docs/` | 使用文档 |
+新建房源继续用 `scripts/new_episode.cmd`，知识类用 `scripts/new-knowledge-episode.cmd`，会客厅用 `npm run new -- interview <slug> --topic <主题>`。三类使用同一发布序号，由 `npm run episodes` 计算。`purpose: test` 不占发布编号。
 
-## 注意
-
-- 房源数据来自已部署的云端 CRM 连接器（目前只接入租赁），用法见 [docs/crm.md](docs/crm.md)（Word：[docs/crm.docx](docs/crm.docx)）。
-- 地图脚本见 [config/map-tools.json](config/map-tools.json)（高德 GCJ-02，密钥只在本机、不进仓库）；flova MCP 在仓库内（`.mcp.json` / `.grok/config.toml`）：地图底图用图片重绘（高德静态图 → `generate_image` → `map/base_ai.png`，代码叠标签），生图用 `generate_image`：成片/精细改图/品牌产品图/地图重绘用 GPT Image 2.5 Sunburst，日常/批量/社媒/试错用 Flare，不生成户型/实景/景观/周边；**视频生成默认关闭**（`flova.video_allowed=false`，只有明确开启才会用 WAN 3.0 Prime）。
-- `projects/` 下真实房源素材、`.env`、`voices/clone/` 均被 gitignore，**不要强制提交**。
-- 本仓库的合规规则是整理稿，不是法律意见；平台规则会更新，发布前以平台最新版本为准。
+房源和知识类默认画幅 4:3、1440×1080、30fps。会客厅首版是 16:9、1920×1080，帧率按本期配置取 25 或 30。主持人、声音、原始素材和来源要求见 [共用制作规范](docs/CONVENTIONS-shared.md)，会客厅的覆盖规则在该文件末节和 [RUNBOOK-interview.md](docs/RUNBOOK-interview.md)。架构与存储管理见 [架构说明](docs/architecture.md)。所有 Agent 按 [PRODUCTION.md](docs/PRODUCTION.md) 接手；旧生产入口已退役，现行入口以该文档为准。

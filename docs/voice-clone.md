@@ -43,3 +43,32 @@ Output: `<out>/<id>.wav` (24 kHz) plus `timings.json`.
 See `docs/TASK-voice-clone.md` (step-by-step instructions for the local agent).
 Newest CosyVoice as of 2026-10: Fun-CosyVoice3-0.5B-2512 (released 2025-12-11). Nothing newer is official.
 Its README table reports zh CER 1.21% / SIM 78.0 (RL variant: 0.81% / 77.4). Inference needs about 4-6 GB VRAM (fp32), which fits 8 GB.
+
+## Default engine: flova_minimax (MiniMax Speech 2.8 HD, voice Gentle_Youth)
+
+Chosen 2026-10-12. It must sound natural and match the Cool Breeze avatar (a man of about 30 with glasses and a suit); the voice only needs a slight resemblance to the user.
+- Run: `C:\ProgramData\miniconda3\python.exe scripts\voice\clone_tts.py <script.json> [--episode <EP>] --out <DIR> [--auto-fallback]`. The default engine is `flova_minimax`.
+- Route: `scripts/voice/flova_minimax_tts.py` calls the flova MCP tool `generate_speech` (`~/.flova-mcp/server.js`, through `scripts/flova/mcp_call.py call()`). It makes one `flova run` per line with model `speech-2.8-hd` and voice `Chinese (Mandarin)_Gentle_Youth` (profile kid4), downloads the mp3, then loudnorms to -16 LUFS as a mono 44.1 kHz wav at `<DIR>/<id>.wav`.
+- Cost: about 10 credits per line. Budget gate: generate_speech is FAIL-CLOSED on the balance (it needs a readable balance of at least `min_balance`, default 20), and it reports the balance delta.
+- Other generate_speech options: `model=seed-audio-1.0` with `ref_audio=<wav>` clones a voice (Seed Audio is the only flova audio model that clones), and `model=elevenlabs` uses presets.
+- Recipe (approved 2026-10-13): **whole-passage mode by default** (`mode: passage`). All lines are joined, each ending with punctuation, into ONE flova call (about 10 credits) and saved as `<DIR>/passage.wav` plus `passage.json` (line ids and texts). Use light rhythm punctuation (commas before key numbers and hooks). Then `atempo=1.1` (`tempo: 1.1` in presenter.yaml, or `--tempo`; pitch is preserved, range 0.5-2.0), then loudnorm to -16 LUFS. Take line and section timings for the edit from Whisper word timestamps on the sped-up wav. `--mode line` makes one call per line.
+- Offline post-steps (no credits, default in passage mode; dependency: `pip install faster-whisper` into conda):
+  1. `scripts/voice/passage_timings.py DIR/passage.wav`: faster-whisper word timestamps (the script is passed as the prompt), then fuzzy character alignment (difflib) to the line order in `passage.json`, so mishearings still align. Unheard characters get interpolated times. Writes `timings.json` (per line `start`/`end`, per-character times, `match_ratio`). With `--split` it also cuts `DIR/<id>.wav` per line plus `<id>.json` word sidecars in the `voice_timing.read_alignment` format (`build_vo.py --alignment-dir DIR`).
+  2. `scripts/voice/retime_pauses.py DIR/passage.wav`: resizes punctuation pauses to after 。！？ 0.42 s, after ，、 0.31 s, and at a line/section break 0.6 s. Each target gets ±15% variation with seed 7. A per-line override goes in `passage.json` as `"pause_after": 0.7` (e.g. after the hook). It never cuts speech: it keeps 60/40 ms guards, only edits gaps that pass an energy check, lengthens with looped room tone, and uses 30 ms crossfades. Writes `retime_report.json`.
+  3. loudnorm -16 LUFS again, then `passage_timings.py --split` again.
+  Skip a step with `--no-retime` or `--no-timings` (clone_tts.py and flova_minimax_tts.py).
+  Test 2026-10-13 on gentleyouth v1 at tempo 1.2: median pause after 。 0.40 -> 0.42 s, after ， 0.38 -> 0.30 s, at section breaks 0.41 -> 0.57 s; Whisper complete; all 5 sidecars pass `read_alignment`.
+- Why atempo: the flova route refuses MiniMax speed/pitch/emotion settings (tested 2026-10-13); `<#x#>` pause markup only lengthened pauses.
+- Fallbacks: (1) indextts25 on Kaggle (`push_indextts25.py`, a clone of ref_phone_v1); (2) local F5 as the last resort (`--auto-fallback` runs it after a flova failure, exit 21).
+- The rule still applies: never put `——` or `--` in TTS text, because it is read aloud. Use `，` or `…` for pauses. The wrapper rejects such text.
+
+## mimo engine (Xiaomi MiMo voiceclone, cloud)
+
+`python scripts\voice\clone_tts.py script.json --engine mimo --out DIR`
+
+- Model `mimo-v2.5-tts-voiceclone` (override with `"mimo_model"` in the script JSON). No GPU or venv needed, only the Python standard library.
+- Key: env `MIMO_API_KEY` (never commit it). Base URL: env `MIMO_BASE_URL`, default `https://token-plan-sgp.xiaomimimo.com/v1` (Token Plan). Pay-as-you-go uses `https://api.xiaomimimo.com/v1`. Keys come from https://platform.xiaomimimo.com.
+- Request: POST `/chat/completions`, header `api-key`. Send `messages=[{"role":"user","content":<style instruction>},{"role":"assistant","content":<text>}]` and `audio={"format":"wav","voice":"data:audio/wav;base64,<ref>"}`. The ref must be wav or mp3 and under 10 MB. The reply audio is in `choices[0].message.audio.data`, as base64 wav.
+- Style: put `"style"` at the top level or on each line, as natural language, e.g. "像朋友聊天，音高起伏明显，句尾往下收".
+- ref_text is not used. TTS is free for a limited time. Keep calls interactive-scale, because the Token Plan forbids automated backends.
+- 2026-10-12 test (demo_v6 hook plus metro section, about 30 s): ECAPA 0.87 against ref_phone_v1. Pitch range 10.6 st and about 67% falling ends, but slow (about 4 chars/s, 32.5 s). See /workspace/voice/compare on the box.

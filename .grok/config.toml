@@ -7,3 +7,16 @@ tool_timeout_sec = 1800
 
 [mcp_servers.flova-image.env]
 FLOVA_BIN = "C:/Users/shipi/AppData/Local/Programs/flova/flova.exe"
+
+[mcp_servers.davinci-resolve]
+command = "C:/Users/shipi/vswp/ReelEstate/tools/davinci-resolve-mcp/runtime/venv/Scripts/python.exe"
+args = ["C:/Users/shipi/vswp/ReelEstate/tools/davinci-resolve-mcp/node_modules/davinci-resolve-mcp/src/server.py"]
+enabled = true
+startup_timeout_sec = 120
+tool_timeout_sec = 600
+
+[mcp_servers.davinci-resolve.env]
+RESOLVE_SCRIPT_API = "C:/ProgramData/Blackmagic Design/DaVinci Resolve/Support/Developer/Scripting"
+RESOLVE_SCRIPT_LIB = "C:/Program Files/Blackmagic Design/DaVinci Resolve/fusionscript.dll"
+PYTHONPATH = "C:/ProgramData/Blackmagic Design/DaVinci Resolve/Support/Developer/Scripting/Modules"
+PYTHONHOME = "C:/Python313"

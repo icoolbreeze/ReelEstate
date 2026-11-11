@@ -2,8 +2,8 @@
 """Track annotation targets through a Muse clip → annotations/<ID>.json for <ScanAnnotate>.
 
 usage:
-  python pipeline/track_annotations.py grid  footage/LR1.mp4 [--t 0.4]          # writes annotations/seeds/LR1_grid.jpg (10% grid) to place seed boxes
-  python pipeline/track_annotations.py track footage/LR1.mp4 [--method vit|csrt|flow] [--step 3] [--t0 0.4]
+  python pipeline/track_annotations.py grid  footage/shots/LR1.mp4 [--t 0.4]          # writes annotations/seeds/LR1_grid.jpg (10% grid) to place seed boxes
+  python pipeline/track_annotations.py track footage/shots/LR1.mp4 [--method vit|csrt|flow] [--step 3] [--t0 0.4]
 seed file annotations/seeds/<ID>.json:
   { "t": 0.4, "targets": [ { "label": "布艺沙发", "sub": "FABRIC SOFA", "box": [x, y, w, h] }, ... ] }   # normalised 0–1 at time t
   a target may carry "pad" (feature-mask margin) or "kf": [[t_sec, x, y, w, h], ...] to hand-key it (tracking skipped)
@@ -161,8 +161,12 @@ def interp(kf, t):
     return kf[-1][1:]
 
 def ann_dir(clip):
-    """<episode>/annotations for a clip at <episode>/footage/<ID>.mp4"""
-    return Path(clip).resolve().parent.parent / "annotations"
+    """<episode>/annotations for a clip anywhere inside the episode (normally footage/shots/<ID>.mp4)"""
+    clip = Path(clip).resolve()
+    for parent in clip.parents:
+        if (parent / "episode.yaml").is_file():
+            return parent / "annotations"
+    return clip.parent.parent / "annotations"
 
 def cmd_grid(a):
     frames, fps = read_frames(a.clip)

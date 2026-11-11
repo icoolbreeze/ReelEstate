@@ -1,0 +1,119 @@
+{
+  "date": "2026-10-25",
+  "completed": true,
+  "removed_test": "ep07-xihu",
+  "remaining_episodes": [
+    "projects/knowledge/ep01-intro",
+    "projects/listing/ep02-zidong"
+  ],
+  "next_release_number": 3,
+  "old_project_support": false,
+  "shared_template": "templates/listing/episode.json",
+  "publication_input": "compliance.json",
+  "handoff": "docs/PRODUCTION.md",
+  "doctor": "npm run doctor",
+  "regression_tests": 27,
+  "typecheck_projects": 2,
+  "render_smoke_tests": 2,
+  "protected_files_verified": 228,
+  "agents_md_unchanged": true,
+  "current_publication_blocker": "第二期缺少已确认的 compliance.json 真实发布资料；草稿可渲染，正式输出保持阻断。",
+  "checks": [
+    {
+      "check": "new_contract",
+      "code": 0,
+      "expected": 0,
+      "pass": true,
+      "tail": "created C:\\Users\\shipi\\vswp\\ReelEstate\\tmp\\production-contract-tests\\tmp157gggxk\\rental\\ep03-rental  raw clips: 0\nnext:  做视频 ep03-rental   |   scripts\\make-video.cmd ep03-rental\ncreated C:\\Users\\shipi\\vswp\\ReelEstate\\tmp\\production-contract-tests\\tmp157gggxk\\resale\\ep03-resale  raw clips: 0\nnext:  做视频 ep03-resale   |   scripts\\make-video.cmd ep03-resale\ncreated C:\\Users\\shipi\\vswp\\ReelEstate\\tmp\\production-contract-tests\\tmp157gggxk\\new-home\\ep03-newhome  raw clips: 0\nnext:  做视频 ep03-newhome   |   scripts\\make-video.cmd ep03-newhome\n\ntest_creator_has_no_test_episode_dependency (pipeline.common.test_production_contract.ProductionContractTests.test_creator_has_no_test_episode_dependency) ... ok\ntest_episode_json_without_yaml_is_rejected (pipeline.common.test_production_contract.ProductionContractTests.test_episode_json_without_yaml_is_rejected) ... ok\ntest_old_file_cannot_satisfy_new_compliance_requirement (pipeline.common.test_production_contract.ProductionContractTests.test_old_file_cannot_satisfy_new_compliance_requirement) ... ok\ntest_old_project_json_is_never_dispatched (pipeline.common.test_production_contract.ProductionContractTests.test_old_project_json_is_never_dispatched) ... ok\n\n----------------------------------------------------------------------\nRan 4 tests in 0.083s\n\nOK\n"
+    },
+    {
+      "check": "architecture",
+      "code": 0,
+      "expected": 0,
+      "pass": true,
+      "tail": "\ntest_ambiguous_short_name_is_rejected (pipeline.common.test_architecture.ArchitectureTests.test_ambiguous_short_name_is_rejected) ... ok\ntest_atomic_rerender_does_not_change_another_export (pipeline.common.test_architecture.ArchitectureTests.test_atomic_rerender_does_not_change_another_export) ... ok\ntest_compaction_preserves_raw_paths_and_external_link_targets (pipeline.common.test_architecture.ArchitectureTests.test_compaction_preserves_raw_paths_and_external_link_targets) ... ok\ntest_materialization_detaches_a_hardlinked_generated_copy (pipeline.common.test_architecture.ArchitectureTests.test_materialization_detaches_a_hardlinked_generated_copy) ... ok\ntest_referenced_build_is_kept (pipeline.common.test_architecture.ArchitectureTests.test_referenced_build_is_kept) ... ok\ntest_shared_source_is_staged_and_snapshots_are_excluded (pipeline.common.test_architecture.ArchitectureTests.test_shared_source_is_staged_and_snapshots_are_excluded) ... ok\ntest_tests_and_directory_aliases_do_not_consume_release_numbers (pipeline.common.test_architecture.ArchitectureTests.test_tests_and_directory_aliases_do_not_consume_release_numbers) ... ok\n\n----------------------------------------------------------------------\nRan 7 tests in 0.470s\n\nOK\n"
+    },
+    {
+      "check": "workflow",
+      "code": 0,
+      "expected": 0,
+      "pass": true,
+      "tail": "ts.test_changed_script_requires_new_timeline) ... ok\ntest_clone_audio_build_and_final_preflight_end_to_end (__main__.WorkflowTests.test_clone_audio_build_and_final_preflight_end_to_end) ... ok\ntest_duplicate_and_missing_voice_lines_stop_preflight (__main__.WorkflowTests.test_duplicate_and_missing_voice_lines_stop_preflight) ... ok\ntest_editorial_captions_need_explicit_spans_for_final (__main__.WorkflowTests.test_editorial_captions_need_explicit_spans_for_final) ... ok\ntest_final_rejects_old_draft_timeline_and_placeholders (__main__.WorkflowTests.test_final_rejects_old_draft_timeline_and_placeholders) ... ok\ntest_heygen_budget_stops_before_writing_audio (__main__.WorkflowTests.test_heygen_budget_stops_before_writing_audio) ... ok\ntest_missing_clone_never_invokes_edge (__main__.WorkflowTests.test_missing_clone_never_invokes_edge) ... ok\ntest_old_heygen_export_cannot_be_split_against_new_voice (__main__.WorkflowTests.test_old_heygen_export_cannot_be_split_against_new_voice) ... ok\ntest_reused_plan_still_respects_reduced_budget (__main__.WorkflowTests.test_reused_plan_still_respects_reduced_budget) ... ok\ntest_two_episodes_have_separate_links_and_never_switch_template (__main__.WorkflowTests.test_two_episodes_have_separate_links_and_never_switch_template) ... ok\ntest_voice_precedence_and_explicit_f5_backup (__main__.WorkflowTests.test_voice_precedence_and_explicit_f5_backup) ... ok\n\n----------------------------------------------------------------------\nRan 12 tests in 2.633s\n\nOK\n"
+    },
+    {
+      "check": "overlay_contract",
+      "code": 0,
+      "expected": 0,
+      "pass": true,
+      "tail": "\ntest_demo_needs_explicit_sample_flag (__main__.OverlayContractTests.test_demo_needs_explicit_sample_flag) ... ok\ntest_invalid_tracking_time_is_rejected (__main__.OverlayContractTests.test_invalid_tracking_time_is_rejected) ... ok\ntest_real_demo_heading_is_rejected (__main__.OverlayContractTests.test_real_demo_heading_is_rejected) ... ok\ntest_real_room_names (__main__.OverlayContractTests.test_real_room_names) ... ok\n\n----------------------------------------------------------------------\nRan 4 tests in 0.000s\n\nOK\n"
+    },
+    {
+      "check": "listing_creator",
+      "code": 0,
+      "expected": 0,
+      "pass": true,
+      "tail": "created C:\\Users\\shipi\\vswp\\ReelEstate\\tmp\\production-cleanup-20261025\\validation\\tmp2fqp4i4r\\ep08-xihu  raw clips: 0\nnext:  做视频 ep08-xihu   |   scripts\\make-video.cmd ep08-xihu\ncreated C:\\Users\\shipi\\vswp\\ReelEstate\\tmp\\production-cleanup-20261025\\validation\\tmp2fqp4i4r\\ep10-yuedu  raw clips: 0\nnext:  做视频 ep10-yuedu   |   scripts\\make-video.cmd ep10-yuedu\ncreated C:\\Users\\shipi\\vswp\\ReelEstate\\tmp\\production-cleanup-20261025\\validation\\tmp2fqp4i4r\\ep11-xipai  raw clips: 0\nnext:  做视频 ep11-xipai   |   scripts\\make-video.cmd ep11-xipai\nself-test ok\n\n"
+    },
+    {
+      "check": "knowledge_creator",
+      "code": 0,
+      "expected": 0,
+      "pass": true,
+      "tail": "created C:\\Users\\shipi\\vswp\\ReelEstate\\tmp\\production-cleanup-20261025\\validation\\tmpecn7voiv\\ep01-gongjijin\nnext:  写 episode.yaml segments + script/research.md，然后 scripts\\make-knowledge-video.cmd ep01-gongjijin --check\nself-test ok\n\n"
+    },
+    {
+      "check": "doctor",
+      "code": 0,
+      "expected": 0,
+      "pass": true,
+      "tail": "{\n  \"pass\": true,\n  \"python_executable\": \"C:\\\\Python313\\\\python.exe\",\n  \"checks\": {\n    \"node\": true,\n    \"ffmpeg\": true,\n    \"ffprobe\": true,\n    \"python_yaml\": true,\n    \"python_numpy\": true,\n    \"python_PIL\": true,\n    \"tools/remotion/node_modules/@remotion/cli/package.json\": true,\n    \"tools/remotion/node_modules/typescript/bin/tsc\": true,\n    \"templates/listing/episode.json\": true,\n    \"templates/listing/compliance.example.json\": true,\n    \"templates/shared/remotion/src/fonts.ts\": true,\n    \"templates/shared/remotion/src/ScanAnnotate.tsx\": true,\n    \"docs/PRODUCTION.md\": true\n  },\n  \"episodes\": [\n    \"projects/knowledge/ep01-intro\",\n    \"projects/listing/ep02-zidong\"\n  ],\n  \"next_release_number\": 3,\n  \"handoff\": \"docs/PRODUCTION.md\",\n  \"external_steps\": \"CRM 登录/素材取用、TTS、HeyGen、可选 Kaggle 按需使用既有账号；本检查不会代替这些步骤。\"\n}\n\n"
+    },
+    {
+      "check": "typecheck",
+      "code": 0,
+      "expected": 0,
+      "pass": true,
+      "tail": "Typecheck: projects\\knowledge\\ep01-intro\\work\\remotion\nTypecheck: projects\\listing\\ep02-zidong\\work\\remotion\n\n"
+    },
+    {
+      "check": "overlay_motion",
+      "code": 0,
+      "expected": 0,
+      "pass": true,
+      "tail": "{\"pass\": true, \"checks\": [{\"ok\": true, \"fails\": [], \"trackingBeforeRmsPx\": 1.0079999999999765, \"trackingAfterRmsPx\": 0.16458476759989255, \"route\": [{\"x\": 252, \"y\": 312}, {\"x\": 242.6332133845031, \"y\": 350}, {\"x\": 259.43555616930047, \"y\": 390.56444383069953}, {\"x\": 300, \"y\": 407.3667866154969}, {\"x\": 376, \"y\": 432}]}, {\"ok\": true, \"tracks\": 22, \"maxCorrectionPx\": 1.2500000000000355}], \"stderr\": \"\"}\n\n"
+    },
+    {
+      "check": "rental_draft",
+      "code": 0,
+      "expected": 0,
+      "pass": true,
+      "tail": "{\n  \"pass\": true,\n  \"python_executable\": \"C:\\\\Python313\\\\python.exe\",\n  \"checks\": {\n    \"node\": true,\n    \"ffmpeg\": true,\n    \"ffprobe\": true,\n    \"python_yaml\": true,\n    \"python_numpy\": true,\n    \"python_PIL\": true,\n    \"tools/remotion/node_modules/@remotion/cli/package.json\": true,\n    \"tools/remotion/node_modules/typescript/bin/tsc\": true,\n    \"templates/listing/episode.json\": true,\n    \"templates/listing/compliance.example.json\": true,\n    \"templates/shared/remotion/src/fonts.ts\": true,\n    \"templates/shared/remotion/src/ScanAnnotate.tsx\": true,\n    \"docs/PRODUCTION.md\": true\n  },\n  \"episodes\": [\n    \"projects/knowledge/ep01-intro\",\n    \"projects/listing/ep02-zidong\"\n  ],\n  \"next_release_number\": 3,\n  \"handoff\": \"docs/PRODUCTION.md\",\n  \"external_steps\": \"CRM 登录/素材取用、TTS、HeyGen、可选 Kaggle 按需使用既有账号；本检查不会代替这些步骤。\",\n  \"episode_check\": {\n    \"pass\": true,\n    \"draft\": true,\n    \"errors\": [],\n    \"warnings\": []\n  }\n}\n\n"
+    },
+    {
+      "check": "rental_final",
+      "code": 1,
+      "expected": 1,
+      "pass": true,
+      "tail": "{\n  \"pass\": false,\n  \"draft\": false,\n  \"errors\": [\n    \"live listing needs compliance.json for publication checks; complete compliance.json.draft with verified details\"\n  ],\n  \"warnings\": []\n}\n\n"
+    },
+    {
+      "check": "knowledge_final",
+      "code": 0,
+      "expected": 0,
+      "pass": true,
+      "tail": "{\n  \"pass\": true,\n  \"python_executable\": \"C:\\\\Python313\\\\python.exe\",\n  \"checks\": {\n    \"node\": true,\n    \"ffmpeg\": true,\n    \"ffprobe\": true,\n    \"python_yaml\": true,\n    \"python_numpy\": true,\n    \"python_PIL\": true,\n    \"tools/remotion/node_modules/@remotion/cli/package.json\": true,\n    \"tools/remotion/node_modules/typescript/bin/tsc\": true,\n    \"templates/listing/episode.json\": true,\n    \"templates/listing/compliance.example.json\": true,\n    \"templates/shared/remotion/src/fonts.ts\": true,\n    \"templates/shared/remotion/src/ScanAnnotate.tsx\": true,\n    \"docs/PRODUCTION.md\": true\n  },\n  \"episodes\": [\n    \"projects/knowledge/ep01-intro\",\n    \"projects/listing/ep02-zidong\"\n  ],\n  \"next_release_number\": 3,\n  \"handoff\": \"docs/PRODUCTION.md\",\n  \"external_steps\": \"CRM 登录/素材取用、TTS、HeyGen、可选 Kaggle 按需使用既有账号；本检查不会代替这些步骤。\",\n  \"episode_check\": {\n    \"pass\": true,\n    \"errors\": []\n  }\n}\n\n"
+    },
+    {
+      "check": "listing_still",
+      "code": 0,
+      "pass": true,
+      "pixels_unchanged": false
+    },
+    {
+      "check": "knowledge_still",
+      "code": 0,
+      "pass": true,
+      "pixels_unchanged": true
+    }
+  ]
+}

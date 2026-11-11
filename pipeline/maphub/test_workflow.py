@@ -25,7 +25,7 @@ class WorkflowTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
 
     def episode(self, name="ep01-test"):
-        ep = self.root / "projects/map-hub" / name
+        ep = self.root / "projects/listing" / name
         (ep / "data").mkdir(parents=True)
         (ep / "public/episode/vo").mkdir(parents=True)
         (ep / "episode.json").write_text('{"sampleData": true}', encoding="utf-8")
@@ -190,7 +190,7 @@ class WorkflowTests(unittest.TestCase):
         import shutil
         if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
             self.skipTest("ffmpeg/ffprobe not installed")
-        parent = REPO / "projects/map-hub"
+        parent = REPO / "projects/listing"
         with tempfile.TemporaryDirectory(prefix="ep00-test-", dir=parent) as temp:
             ep = Path(temp)
             (ep/"episode.json").write_text('{"sampleData":true}', encoding="utf-8")

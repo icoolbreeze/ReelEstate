@@ -1,5 +1,6 @@
-"""Voice-clone TTS for ReelEstate (Fun-CosyVoice3 / F5-TTS / IndexTTS2).
-Usage: python scripts\voice\clone_tts.py script.json [--out DIR] [--engine cosyvoice|f5|indextts2] [--fp16]
+"""Voiceover TTS for ReelEstate. Default engine flova_minimax (MiniMax Speech 2.8 HD preset Gentle_Youth via flova CLI,
+scripts/voice/flova_minimax_tts.py). Fallbacks: indextts25 (Kaggle), then local F5 (last resort). Also cosyvoice / indextts2 / mimo.
+Usage: python scripts\voice\clone_tts.py script.json [--out DIR] [--engine flova_minimax|indextts25|f5|cosyvoice|indextts2|mimo] [--auto-fallback] [--fp16]
 script.json: {"engine": "cosyvoice|f5", "ref_wav": "assets/presenter/cool-breeze/voice/ref_phone_v1.wav" (default; fallback voices/clone/reference.wav),
               "ref_text": "voices/clone/reference.txt" (file or literal),
               "lines": [{"id": "s01", "text": "...", "seed"?: int, "speed"?: float}, ...]}
@@ -14,10 +15,43 @@ ap.add_argument("script")
 ap.add_argument("--out")
 ap.add_argument("--episode", help="resolve shared presenter and per-episode voice settings")
 ap.add_argument("--fp16", action="store_true")
-ap.add_argument("--engine", choices=["cosyvoice", "f5", "indextts2", "indextts25"], default=None)
+ap.add_argument("--tempo", type=float, help="flova_minimax: pitch-preserving atempo (default 1.1 / presenter voice.tempo)")
+ap.add_argument("--mode", choices=["passage", "line"], help="flova_minimax: one call for the whole passage (default) or one per line")
+ap.add_argument("--no-retime", action="store_true", help="flova_minimax passage mode: skip pause retiming")
+ap.add_argument("--no-timings", action="store_true", help="flova_minimax passage mode: skip Whisper timings/split")
+ap.add_argument("--auto-fallback", action="store_true", help="flova_minimax: on failure run local F5 (last resort) after printing the indextts25 command")
+ap.add_argument("--engine", choices=["flova_minimax", "cosyvoice", "f5", "indextts2", "indextts25", "mimo"], default=None)
 a = ap.parse_args()
 cfg = json.load(open(a.script, encoding="utf-8"))
-engine = a.engine or cfg.get("engine") or "indextts25"
+engine = a.engine or cfg.get("engine") or "flova_minimax"
+if engine == "flova_minimax":
+    # Default voiceover (approved 2026-10-12). Text goes verbatim to flova; no speaker ref needed.
+    script_path = a.script
+    if a.episode:
+        sys.path.insert(0, os.path.join(ROOT, "pipeline", "maphub"))
+        from voice_config import prepare_narration
+        cfg, _voice = prepare_narration(Path(a.episode), cfg, engine=engine)
+        script_path = os.path.join(a.out or os.path.dirname(os.path.abspath(a.script)), "resolved_flova_minimax.json")
+        os.makedirs(os.path.dirname(script_path), exist_ok=True)
+        json.dump(cfg, open(script_path, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    cmd = [sys.executable, os.path.join(ROOT, "scripts", "voice", "flova_minimax_tts.py"), script_path]
+    if a.out: cmd += ["--out", a.out]
+    if cfg.get("voice"): cmd += ["--voice", cfg["voice"]]
+    if cfg.get("flova_profile"): cmd += ["--profile", cfg["flova_profile"]]
+    tempo = a.tempo or cfg.get("tempo")
+    if tempo: cmd += ["--tempo", str(tempo)]
+    mode = a.mode or cfg.get("mode")
+    if mode: cmd += ["--mode", mode]
+    if a.no_retime: cmd += ["--no-retime"]
+    if a.no_timings: cmd += ["--no-timings"]
+    rc = subprocess.call(cmd)
+    if rc == 21:
+        print("flova_minimax failed. Fallback 1 (Kaggle): C:\\ProgramData\\miniconda3\\python.exe scripts\\voice\\push_indextts25.py --episode <EP> --script <json>")
+        if a.auto_fallback:
+            print("--auto-fallback: running local F5 (last resort)")
+            f5 = [os.path.join(ROOT, "scripts", "voice", "clone_tts_f5.cmd"), a.script] + (["--out", a.out] if a.out else []) + (["--episode", a.episode] if a.episode else [])
+            rc = subprocess.call(["cmd", "/c", *f5])
+    sys.exit(rc)
 if a.episode:
     sys.path.insert(0, os.path.join(ROOT, "pipeline", "maphub"))
     from voice_config import prepare_narration
@@ -39,15 +73,33 @@ if engine == "indextts2":
 
 base = os.path.dirname(os.path.abspath(a.script))
 p = lambda x: x if os.path.isabs(x) else (os.path.join(base, x) if os.path.exists(os.path.join(base, x)) else os.path.join(ROOT, x))
-ref_wav = p(cfg.get("ref_wav", "assets/presenter/cool-breeze/voice/ref_phone_v1.wav"))
-rt = cfg.get("ref_text", "assets/presenter/cool-breeze/voice/ref_phone_v1.txt")
+# F5 clips refs >12 s (ref_text then mismatches and the ref tail leaks into output), so F5 defaults to a 6.6 s cut.
+_dref = "assets/presenter/cool-breeze/voice/ref_phone_v1_f5" if engine == "f5" else "assets/presenter/cool-breeze/voice/ref_phone_v1"
+ref_wav = p(cfg.get("ref_wav", _dref + ".wav"))
+rt = cfg.get("ref_text", _dref + ".txt")
 ref_text = open(p(rt), encoding="utf-8").read().strip() if os.path.exists(p(rt)) else rt
 out = a.out or cfg.get("out") or os.path.join(base, "tts")
 if not os.path.isabs(out): out = os.path.join(ROOT, out)
 os.makedirs(out, exist_ok=True)
 
 t = time.time()
-if engine == "f5":
+if engine == "mimo":
+    # Xiaomi MiMo voiceclone (cloud). Key from env MIMO_API_KEY; base URL from MIMO_BASE_URL
+    # (Token Plan: https://token-plan-sgp.xiaomimimo.com/v1, pay-as-you-go: https://api.xiaomimimo.com/v1).
+    # Interactive use only: the Token Plan terms forbid automated backends.
+    import base64, urllib.request
+    MIMO_KEY = os.environ.get("MIMO_API_KEY") or sys.exit("set MIMO_API_KEY")
+    MIMO_URL = os.environ.get("MIMO_BASE_URL", "https://token-plan-sgp.xiaomimimo.com/v1").rstrip("/") + "/chat/completions"
+    model = cfg.get("mimo_model", "mimo-v2.5-tts-voiceclone")
+    _voice = "data:%s;base64,%s" % ("audio/wav" if ref_wav.lower().endswith(".wav") else "audio/mpeg",
+                                     base64.b64encode(open(ref_wav, "rb").read()).decode())
+    def mimo_tts(text, style=""):
+        body = {"model": model, "messages": [{"role": "user", "content": style}, {"role": "assistant", "content": text}],
+                "audio": {"format": "wav", "voice": _voice}}
+        rq = urllib.request.Request(MIMO_URL, json.dumps(body).encode(), {"Content-Type": "application/json", "api-key": MIMO_KEY})
+        d = json.load(urllib.request.urlopen(rq, timeout=300))
+        return base64.b64decode(d["choices"][0]["message"]["audio"]["data"])
+elif engine == "f5":
     from f5_tts.api import F5TTS
     model = "F5TTS_v1_Base"
     m = F5TTS(model=model, device="cuda", hf_cache_dir=os.path.join(ROOT, "vendor", "f5tts", "hf"))
@@ -67,7 +119,12 @@ for i, ln in enumerate(cfg["lines"]):
     if isinstance(ln, str): ln = {"id": f"line{i+1:02d}", "text": ln}
     f = os.path.join(out, ln["id"] + ".wav")
     t = time.time()
-    if engine == "f5":
+    if engine == "mimo":
+        data = mimo_tts(ln["text"], ln.get("style", cfg.get("style", "")))
+        open(f, "wb").write(data)
+        import wave
+        with wave.open(f) as wf: dur = wf.getnframes() / wf.getframerate()
+    elif engine == "f5":
         wav, sr, spec = m.infer(
             ref_file=ref_wav,
             ref_text=ref_text,

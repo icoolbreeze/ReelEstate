@@ -23,7 +23,7 @@ def main():
     else:
         ids = [s["id"] for s in S["shots"]]; groups = [ids[i:i + a.per] for i in range(0, len(ids), a.per)]
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
-    manifest = {"episode": ep.name, "note": "Save each Muse download as footage/<ID>.mp4 (targetRel). Then: python pipeline/sync_assets.py episodes/" + ep.name,
+    manifest = {"episode": ep.name, "note": "Save each Muse download as footage/shots/<ID>.mp4 (targetRel). Then: python pipeline/common/sync_assets.py projects/listing/" + ep.name,
                 "count": sum(len(g) for g in groups), "clips": []}
     for bi, g in enumerate(groups, 1):
         n = len(g)
@@ -38,7 +38,7 @@ def main():
             msg += [f"{k}）【{cid}】{s['purpose']}", body, ""]
             manifest["clips"].append({"id": cid, "batch": bi, "index": k, "kind": s["kind"], "description": s["purpose"], "lines": s["lines"],
                                       "annotate": [{"label": l, "sub": e} for l, e in s.get("annotate", [])],
-                                      "targetRel": f"footage/{cid}.mp4", "target": f"{a.box_root}/footage/{cid}.mp4",
+                                      "targetRel": f"footage/shots/{cid}.mp4", "target": f"{a.box_root}/footage/shots/{cid}.mp4",
                                       "audio": "presenter clips: Muse audio is not lip-synced; final mix uses TTS, clip is muted" if s["kind"] == "presenter" else "unused"})
         msg += [f"一共 {n} 条，请逐条分别输出（{'、'.join(g)}）。"]
         (out / f"batch{bi}.txt").write_text("\n".join(msg) + "\n", encoding="utf-8")

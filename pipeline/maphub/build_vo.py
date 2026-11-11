@@ -1,3 +1,4 @@
+import json
 #!/usr/bin/env python3
 """TTS voiceover + timeline + audio mix for a map-hub episode.
 
@@ -144,7 +145,7 @@ def main():
         f0 = round(start * FPS)
         caps = caption_frames(L["tts"], L["cap"], j["words"], j["dur"], f0, FPS,
                               spans=L.get("cap_spans"), allow_estimated=DRAFT or not VOICE_DIR)
-        rec = {k: v for k, v in L.items() if k not in ("tts", "cap", "gap")}
+        rec = {k: v for k, v in L.items() if k not in ("tts", "cap", "gap", "hold")}
         rec.update(f0=f0, f1=round(end * FPS), dur=round(j["dur"], 3), caps=caps, audio=f"episode/vo/{L['id']}.mp3", tts=L["tts"],
                    caption_timing=j.get("caption_timing", "word"), source_audio=j.get("source"), source_sha256=j.get("audio_sha256"))
         if L.get("enter"):
@@ -152,10 +153,12 @@ def main():
         if L.get("insert"):   # cut-away inside a map line: cursor clicks `mark`, clip opens from it at caption chunk `cap`, closes at line end
             ins = dict(L["insert"]); fi = caps[ins.get("cap", 0)]["f0"] - 4
             ins.update(f0=fi, click=fi - CLICK_LEAD, f1=min(round(end * FPS) - 4, fi + ins.get("dur", 60))); rec["insert"] = ins
-        lines.append(rec); t = end
+        hold = float(L.get("hold", 0) or 0)   # optional visual pause after the line (B-roll keeps playing, no speech)
+        if hold: rec["hold_f"] = round(hold * FPS)
+        lines.append(rec); t = end + hold
     # each line's visual holds until the next line starts (last line + 1.2 s tail)
     for i, r in enumerate(lines):
-        r["v0"] = 0 if i == 0 else r["f0"] - (lines[i]["f0"] - lines[i - 1]["f1"])  # visual starts in the gap before the line
+        r["v0"] = 0 if i == 0 else lines[i - 1]["f1"] + lines[i - 1].get("hold_f", 0)  # visual starts in the gap before the line (after any hold)
     for i, r in enumerate(lines):
         r["v1"] = lines[i + 1]["v0"] if i + 1 < len(lines) else r["f1"] + 36
     for r in lines:   # entering lines: visual (clip) starts at the line start; the gap belongs to the map/click
@@ -202,6 +205,21 @@ def main():
             put(sfx / "ui/ui-select-click.mp3", r["insert"]["click"], 0.4)
             put(sfx / "transition/swoosh-slow.mp3", r["insert"]["click"] + 11, 0.2)
             put(sfx / "data/data-scan.mp3", r["insert"]["f0"] + 6, 0.10)
+    # basic-3d-scene (hub.json "space3d"): one subtle whoosh per camera flight, starting with the flight
+    try:
+        S3 = json.loads((epd / "data/hub.json").read_text(encoding="utf-8")).get("space3d")
+    except Exception:
+        S3 = None
+    if S3:
+        f0s = {r["id"]: r["f0"] for r in lines}
+        for st in S3["stations"][1:] + [S3["overview"]]:
+            an = st["arrive"]
+            if an["line"] in f0s:
+                put(sfx / "transition/swoosh-slow.mp3", f0s[an["line"]] + round(an["t"] * FPS) - S3["fly"], 0.12)
+    # v8c opener listing scroll (Opener.tsx DRV: fast scroll main frames 0-28, hard brake + settle at 28): whoosh + card-flip riffle, thunk on the settle
+    put(sfx / "transition/whoosh-fast.mp3", 0, 0.16)
+    put(sfx / "paper/paper-book-browse-fast.mp3", 1, 0.14)
+    put(sfx / "impact/hit-weak.mp3", 27, 0.22)
     if a.opener_sfx and Path(a.opener_sfx).exists():
         fx[: min(n, len(load(a.opener_sfx)))] += 0.8 * load(a.opener_sfx)[:n]
     bed = np.zeros(n)
@@ -223,7 +241,7 @@ def main():
     raw.unlink()
 
     # ---- human-readable timed script ----
-    md = ["# 口播稿（带时间、版式）· " + epd.name, "", f"TTS {voice} {rate}；总长 {total} 帧 = {total / FPS:.1f}s。房源信息全部为**示例数据**。", "",
+    md = ["# 口播稿（带时间、版式）· " + epd.name, "", f"TTS {voice} {rate}；总长 {total} 帧 = {total / FPS:.1f}s。" + ("房源信息全部为**示例数据**。" if (proj / "episode.json").is_file() and json.loads((proj / "episode.json").read_text(encoding="utf-8-sig")).get("sampleData") is True else "房源信息为真实数据（CRM / 高德 / 开发商资料）。"), "",
           "| 行 | 时间 (s) | 版式 | 画面 | 进入方式 | 台词 |", "|---|---|---|---|---|---|"]
     a_frames = 0
     for r in lines:

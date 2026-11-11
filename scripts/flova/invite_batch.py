@@ -7,11 +7,17 @@
 2. 邀请码（promotion_code）串行预热一次并缓存；并行线程不再各自启动母号
    browser-profile，消除 launchPersistentContext 会话冲突。
 
-用法: python invite_batch.py 4
+用法:
+    python invite_batch.py [N]
+    python invite_batch.py --profile <profile> [N]
+
+省略 --profile 时仍用 mother_profile="prod"，与原来的命令相同。
 """
 from __future__ import annotations
 
+import argparse
 import json
+import re
 import sys
 
 import requests
@@ -55,9 +61,45 @@ def pick_fresh(n: int) -> list[dict[str, str]]:
     return picked
 
 
+def email_for_profile(profile: str) -> str | None:
+    """账本里 api_key_ref 指向该 profile 的邮箱。没有就 None。"""
+    for account in fi.load_registry().get("accounts", []):
+        if fi.profile_from_ref(account.get("api_key_ref")) == profile and account.get("email"):
+            return account.get("email")
+    return None
+
+
+def parse_args(argv: list[str] | None = None) -> tuple[int, str | None]:
+    parser = argparse.ArgumentParser(description="Invite-register N children in parallel")
+    parser.add_argument("n", nargs="?", type=int, default=4)
+    parser.add_argument("--profile", default="")
+    args = parser.parse_args(argv)
+    if args.n < 1:
+        parser.error("n must be >= 1")
+    profile = args.profile.strip() or None
+    if profile and not re.fullmatch(r"[A-Za-z0-9._-]+", profile):
+        parser.error("invalid profile")
+    return args.n, profile
+
+
+def cli_invocation(argv: list[str] | None = None) -> dict:
+    """解析命令行。不注册。省略 --profile 时 mother_profile 仍是 prod。"""
+    count, profile = parse_args(argv)
+    if profile:
+        return {
+            "n": count,
+            "mother_profile": profile,
+            "inviter_email": email_for_profile(profile),
+            "resolve_inviter_email": False,
+        }
+    return {"n": count, "mother_profile": "prod", "resolve_inviter_email": True}
+
+
 def main(n: int, mother_profile: str = "prod",
-         inviter_email: str | None = None) -> None:
-    if inviter_email is None:
+         inviter_email: str | None = None,
+         *,
+         resolve_inviter_email: bool = True) -> None:
+    if inviter_email is None and resolve_inviter_email:
         # 和 ensure_credits 相同：账本里 role == "mother" 的账号 email；读不到就 None。
         inviter_email = next(
             (a.get("email") for a in fi.load_registry().get("accounts", [])
@@ -87,7 +129,8 @@ def main(n: int, mother_profile: str = "prod",
     with fi._Lock(fi.LOCK_PATH):
         slots = fi._allocate_slots(n)
         for s in slots:
-            print("slot:", s["profile_name"], s["mailbox"]["address"], s["worker"][0])
+            print("slot:", s["profile_name"], s["mailbox"]["address"],
+                  f"{fi.browser_backend()}:{s['worker'].id}")
         results = fi._run_parallel(mother_profile, slots)
         fi._record_children(results, inviter_email)
 
@@ -108,5 +151,4 @@ def main(n: int, mother_profile: str = "prod",
 
 
 if __name__ == "__main__":
-    n = int(sys.argv[1]) if len(sys.argv) > 1 else 4
-    main(n)
+    main(**cli_invocation())

@@ -30,7 +30,7 @@
           },
           "web_profile_ref": {
             "type": "string",
-            "description": "VirtualBrowser worker 标识或其会话目录引用，不放 cookie"
+            "description": "网页会话目录引用（~/.flova-mcp/browser-profiles/<name>）。不放 cookie。注册浏览器是 AdsPower；账本既不存 AdsPower api-key，也不存 cookie。"
           },
           "mailbox_ref": { "type": "string", "description": "邮箱池 key" },
           "balance_total": { "type": "number" },

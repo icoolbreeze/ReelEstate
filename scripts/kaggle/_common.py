@@ -16,6 +16,15 @@ def kaggle_exe():
     sys.exit("kaggle CLI not found; install with: pip install --user kaggle")
 
 
+def kaggle_cmd():
+    """Prefer `<this python> -m kaggle` so the OAuth login of the user's conda base
+    (C:\\ProgramData\\miniconda3\\python.exe) is used; fall back to kaggle.exe."""
+    import importlib.util
+    if importlib.util.find_spec("kaggle") is not None:
+        return [sys.executable, "-m", "kaggle"]
+    return [kaggle_exe()]
+
+
 def _kaggle_home():
     return Path(os.environ.get("KAGGLE_CONFIG_DIR") or Path.home() / ".kaggle")
 
@@ -60,7 +69,7 @@ def username(cli_user=None):
 
 
 def run(args, check=True, capture=True):
-    r = subprocess.run([kaggle_exe(), *args], capture_output=capture, text=True,
+    r = subprocess.run([*kaggle_cmd(), *args], capture_output=capture, text=True,
                        encoding="utf-8", errors="replace")
     if check and r.returncode != 0:
         sys.exit(f"kaggle {' '.join(args[:3])} failed:\n{r.stdout}\n{r.stderr}")

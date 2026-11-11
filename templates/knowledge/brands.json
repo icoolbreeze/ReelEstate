@@ -1,0 +1,64 @@
+{
+ "sourceMark": {
+  "file": "brands/beike_mark_mono.png",
+  "label": "内容与数据来源：平台公开资料",
+  "ar": 2.77
+ },
+ "rowLabel": "平台经纪品牌（部分）",
+ "row": [
+  {
+   "name": "链家",
+   "file": "brands/lianjia_mono.png",
+   "h": 22,
+   "ar": 3.313
+  },
+  {
+   "name": "德佑",
+   "file": "brands/deyou_mono.png",
+   "h": 22,
+   "ar": 2.7565
+  },
+  {
+   "name": "富房",
+   "file": "brands/fufang_mono.png",
+   "h": 15,
+   "ar": 7.8864
+  },
+  {
+   "name": "21世纪不动产",
+   "file": "brands/century21_mono.svg",
+   "h": 12,
+   "ar": 9.3529
+  },
+  {
+   "name": "中环",
+   "file": "brands/zhonghuan_mono.png",
+   "h": 19,
+   "ar": 4.5333,
+   "color": "brands/zhonghuan_color.png"
+  }
+ ],
+ "logoLibrary": {
+  "dir": "templates/map-hub/shared/public/brands",
+  "posterDir": "assets/brands/logos",
+  "note": "品牌 logo 库，后续各期复用；来源与质量见 brands.md",
+  "files": {
+   "贝壳": "beike_mark_mono.png",
+   "链家": "lianjia_mono.png",
+   "德佑": "deyou_color.png",
+   "富房": "fufang_mono.png",
+   "21世纪不动产": "century21_mono.svg",
+   "21世纪不动产_png": "c21.png",
+   "中环": "zhonghuan_color.png",
+   "中环_mono": "zhonghuan_mono.png",
+   "德佑_mono": "deyou_mono.png"
+  },
+  "colors": {
+   "德佑": {
+    "mark": "#EB0028",
+    "text": "#232323",
+    "source": "deyoulife.com 官网主视觉 file.ljcdn.com/nebula/dy3_1742891592037.jpg"
+   }
+  }
+ }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "reelestate-davinci-resolve-mcp",
+  "private": true,
+  "dependencies": {
+    "davinci-resolve-mcp": "4.17.0"
+  }
+}

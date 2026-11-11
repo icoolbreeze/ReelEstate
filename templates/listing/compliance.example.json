@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "id": "待填",
+  "category": "rental",
+  "title": "待填",
+  "property": {
+    "property_type": "待填",
+    "layout": "",
+    "area": {
+      "type": "待填",
+      "value": null
+    },
+    "location": {
+      "city": "成都",
+      "district": "待填",
+      "community": ""
+    }
+  },
+  "price": {
+    "type": "月租金",
+    "value": null,
+    "unit": "元/月",
+    "valid_until": "待填"
+  },
+  "agency": {
+    "full_name": "待填"
+  },
+  "agent": {
+    "name": "待填",
+    "certified_on_camera": false
+  },
+  "drawbacks": [
+    "待填"
+  ],
+  "ai_voice": true,
+  "ad_disclosure": false,
+  "rental": {
+    "rent_type": "待填",
+    "payment_terms": "待填"
+  },
+  "resale": {
+    "verification_code": "待填",
+    "owner_consent": false
+  },
+  "new_home": {
+    "developer_full_name": "待填",
+    "presale_permit_no": "待填"
+  }
+}

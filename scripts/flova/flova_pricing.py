@@ -1,25 +1,10 @@
-"""Flova Model Pricing Table 服务（v2，2026-09-21 按 grok 审核整改）。
+"""Flova official model-price quoting and separate usage reconciliation.
 
-闭环：
-  生成前  quote() 预估成本（表价 × 实扣经验系数）+ assess() 判断积分够不够
-  生成后  reconcile() 用实际余额差核对；revision 变化才标记表需重录
-
-v2 整改（对应审核报告 P1-1/P1-2/P1-4）：
-  1. 金额整数化：unit_usd 先 round 到 0.0001 再 ×100×数量，消除浮点 ceil 伪影
-     （Wan 5s 表价 35 不再被报成 36）。
-  2. 实扣经验系数表 ~/.flova/pricing_calibration.json：
-     key = "model_key|resolution|variant"，value = 实扣/表价 中位数。
-     quote() 返回 table_credits（纯表价）与 estimated_credits（×系数后的预算口径）。
-     图片档当前经验系数 2.0（表5实10）；Wan 480p 按 8cr/s（40/5s）。
-  3. stale 语义修正：reconcile 不匹配时先比对 remote revision——
-     revision 变了 → 标 stale（表真的更新了）；没变 → 只记偏差到 calibration，
-     不再把整张表打成 stale（系统性口径差 ≠ 表更新）。
-  4. reconcile 有 CLI 子命令；探索奖励可从网页会话自动读取（需 web-session.js）。
-  5. 视频参考时长：quantity = 生成秒数 + 参考视频总秒数（ref_seconds）；
-     有 priceWithRefVideo 行用之，无该行（如 Wan）按标准单价 × 叠加时长。
-
-余额读取走 flova CLI（`flova --profile <name> account user`）。
-网页会话只读接口（积分桶/邀请/探索）见 web_ops()，走 ~/.flova-mcp/web-session.js。
+Quotes follow https://config.flova.ai/config/model-list/read.
+The official frontend converts normal/member values to credits by multiplying
+by 100. Historical balance-delta calibration never changes an official quote.
+Images: per-image price times count once. Videos: per-second price times the
+applicable duration once. Balance deltas are observations, not billing receipts.
 """
 from __future__ import annotations
 
@@ -28,8 +13,9 @@ import math
 import os
 import subprocess
 import time
+import tempfile
 from dataclasses import dataclass, asdict
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_CEILING
 from pathlib import Path
 from typing import Any
 
@@ -67,32 +53,25 @@ def refresh(store_path: Path = STORE_PATH) -> dict[str, Any]:
         "models": data["models"],
     }
     store_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = store_path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(store, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(store_path)
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=store_path.parent,
+                                     prefix=store_path.name + ".", suffix=".tmp", delete=False) as stream:
+        json.dump(store, stream, ensure_ascii=False, indent=2)
+        temporary = Path(stream.name)
+    try:
+        temporary.replace(store_path)
+    finally:
+        temporary.unlink(missing_ok=True)
     return store
 
 
 def load(store_path: Path = STORE_PATH, *, max_age_hours: float | None = 24) -> dict[str, Any]:
-    """读取已记录的价格表；缺失或过旧时自动拉取。
-
-    注意：自动 refresh 不清除 stale 标记——stale 只由 reconcile 判定
-    （revision 变化时）清除。
-    """
-    need_fetch = not store_path.exists()
-    store = None
-    if not need_fetch:
-        store = json.loads(store_path.read_text(encoding="utf-8"))
-        age_h = (time.time() - store["recorded_at"]) / 3600
-        if max_age_hours is not None and age_h > max_age_hours:
-            need_fetch = True
-    if need_fetch:
-        new_store = refresh(store_path)
-        # 保留 stale 标记：数据老化重拉 ≠ 口径问题解决
-        if store is not None and store.get("stale"):
-            new_store["stale"] = True
-            store_path.write_text(json.dumps(new_store, ensure_ascii=False, indent=2), encoding="utf-8")
-        return new_store
+    """Load the official table, refreshing missing, stale or expired records."""
+    if not store_path.exists():
+        return refresh(store_path)
+    store = json.loads(store_path.read_text(encoding="utf-8"))
+    age_h = (time.time() - store["recorded_at"]) / 3600
+    if store.get("stale") or (max_age_hours is not None and age_h > max_age_hours):
+        return refresh(store_path)
     return store
 
 
@@ -128,14 +107,12 @@ def calib_key(model_key: str, resolution: str, variant: str = "price") -> str:
 
 
 def get_factor(model_key: str, resolution: str, variant: str = "price") -> float:
-    """实扣/表价经验系数；无记录返回 1.0。"""
-    return float(_calib_load().get(calib_key(model_key, resolution, variant), 1.0))
+    """Compatibility field: official quotes have no empirical multiplier."""
+    return 1.0
 
 
 def set_factor(model_key: str, resolution: str, factor: float, variant: str = "price") -> None:
-    calib = _calib_load()
-    calib[calib_key(model_key, resolution, variant)] = round(factor, 3)
-    _calib_save(calib)
+    raise ValueError("Empirical price multipliers are disabled; quotes use the official model table")
 
 
 # ----------------------------- 查价层 ----------------------------------
@@ -148,25 +125,21 @@ def find_model(store: dict[str, Any], key: str) -> dict[str, Any]:
 
 
 def _unit_usd(model: dict[str, Any], resolution: str, *, with_ref_video: bool, member: bool) -> float:
-    want_variant = "priceWithRefVideo" if with_ref_video else "price"
-    res = resolution.lower()
-    for p in model.get("prices", []):
-        if p.get("resolution", "").lower() != res:
-            continue
-        if p.get("variant", "price") != want_variant:
-            continue
-        col = "member" if member else "normal"
-        val = p.get(col)
-        if isinstance(val, (int, float)):
-            return float(val)
-    # 回退：忽略 variant 精确匹配（如 Wan 3.0 无参考视频行）
-    for p in model.get("prices", []):
-        if p.get("resolution", "").lower() == res:
-            col = "member" if member else "normal"
-            val = p.get(col)
-            if isinstance(val, (int, float)):
-                return float(val)
-    raise KeyError(f"no usable price for {model.get('key')} {resolution}")
+    variant = "priceWithRefVideo" if with_ref_video else "price"
+    res = str(resolution).strip().lower()
+    rows = [p for p in model.get("prices", []) if str(p.get("resolution", "")).lower() == res]
+    exact = [p for p in rows if p.get("variant", "price") == variant]
+    # Models without any reference-video tier use their documented base tier.
+    if not exact and with_ref_video and not any(p.get("variant") == variant for p in model.get("prices", [])):
+        exact = [p for p in rows if p.get("variant", "price") == "price"]
+    exact = sorted(exact, key=lambda p: p.get("region", "default") != "default")
+    if not exact:
+        raise KeyError(f"no official price for {model.get('key')} {resolution} {variant}")
+    col = "member" if member else "normal"
+    value = exact[0].get(col)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+        raise ValueError(f"official price unavailable for {model.get('key')} {resolution} {col}")
+    return float(value)
 
 
 # ----------------------------- 余额层 ----------------------------------
@@ -200,13 +173,15 @@ class Quote:
     model_type: str
     unit_usd: float
     table_credits: int        # 纯表价（整数积分）
-    factor: float             # 实扣经验系数
-    estimated_credits: int    # 预算口径 = ceil(table_credits × factor)
+    factor: float             # 兼容字段，官方报价固定为1
+    estimated_credits: int    # 官方表价，不乘经验系数
     quantity: float           # 计费数量：视频=生成+参考秒数；图/音=1
     ref_seconds: float        # 参考视频叠加时长
     resolution: str
     variant: str              # price / priceWithRefVideo
     member: bool
+    pricing_source: str = CONFIG_URL
+    pricing_revision: str = ""
 
 
 def quote(
@@ -220,9 +195,9 @@ def quote(
     member: bool | None = None,
     store: dict[str, Any] | None = None,
 ) -> Quote:
-    """按 Model Pricing Table × 实扣系数 预估一次生成的积分成本。
+    """按官方 Model Pricing Table 预估一次生成的积分成本，不使用历史系数。
 
-    金额整数化：unit_usd → Decimal 四舍五入到 0.0001 → ×100 得表价积分，
+    金额整数化：unit_usd → Decimal ×100 得表价积分，
     再 × 数量（视频为生成+参考秒数）后 ceil。
     """
     store = store or load()
@@ -233,29 +208,28 @@ def quote(
         res_param = next((x for x in model.get("params", []) if x["key"] == "resolution"), None)
         resolution = res_param["default"] if res_param else "default"
 
+    ref_seconds = float(ref_seconds)
+    if not math.isfinite(ref_seconds) or ref_seconds < 0:
+        raise ValueError("ref_seconds must be finite and non-negative")
+    with_ref_video = bool(with_ref_video or ref_seconds > 0)
     unit = _unit_usd(model, resolution, with_ref_video=with_ref_video, member=bool(member))
-
-    # 表价积分：整数化运算，消除 0.07*100 伪影
-    unit_credits_dec = (Decimal(str(unit)) * USD_TO_CREDITS).quantize(
-        Decimal("0.01"), rounding=ROUND_HALF_UP)
-
+    unit_credits_dec = Decimal(str(unit)) * USD_TO_CREDITS
     if model["type"] == "video":
-        dur_param = next((x for x in model.get("params", []) if x["key"] == "duration"), None)
-        if seconds is None:
-            seconds = float(dur_param["default"]) if dur_param else 5
-        quantity = float(seconds) + float(ref_seconds)
+        duration = next((x for x in model.get("params", []) if x["key"] == "duration"), None)
+        seconds = float(seconds if seconds is not None else duration["default"] if duration else 5)
+        if not math.isfinite(seconds) or seconds <= 0:
+            raise ValueError("seconds must be finite and positive")
+        quantity = float(Decimal(str(seconds)) + Decimal(str(ref_seconds)))
         variant = "priceWithRefVideo" if with_ref_video else "price"
-        # Wan 等无参考视频行的模型：回退标准单价，靠叠加时长计费
-        raw = unit_credits_dec * Decimal(str(quantity))
     else:
+        if ref_seconds:
+            raise ValueError("image/audio quote cannot include reference-video seconds")
         quantity = 1
         variant = "price"
-        raw = unit_credits_dec
-
-    table_credits = math.ceil(float(raw))
-
-    factor = get_factor(model_key, resolution, variant)
-    estimated = math.ceil(table_credits * factor)
+    raw = unit_credits_dec * Decimal(str(quantity))
+    table_credits = int(raw.to_integral_value(rounding=ROUND_CEILING))
+    factor = 1.0  # The official table is authoritative; no historical calibration.
+    estimated = table_credits
 
     return Quote(
         model_key=model_key,
@@ -269,6 +243,7 @@ def quote(
         resolution=resolution,
         variant=variant,
         member=bool(member),
+        pricing_revision=str(store.get("revision", "")),
     )
 
 
@@ -278,7 +253,8 @@ def assess(q: Quote, *, balance: float, count: int = 1) -> dict[str, Any]:
     图片多张按 ``estimated_credits * count`` 留预算；视频 count 恒为 1。
     quote() 仍返回单张口径；总量口径只在这里和 preflight/postflight 里算。
     """
-    count = max(1, int(count))
+    if isinstance(count, bool) or not isinstance(count, int) or count < 1:
+        raise ValueError("count must be a positive integer")
     budget = q.estimated_credits * count
     return {
         "balance": balance,
@@ -302,66 +278,37 @@ def reconcile(
     reward_credits: float = 0.0,
     store_path: Path = STORE_PATH,
 ) -> dict[str, Any]:
-    """用实际余额差核对预估（预算口径）。
+    """Compare an unattributed balance observation with the official quote.
 
-    actual = (before - after) + 本次首做奖励。
-    对不上时：先比对 remote revision——
-      变了 → mark_stale（表真的更新了，需 refresh 重录）；
-      没变 → 记录偏差到校准表（更新经验系数），不动 stale。
+    Never treat concurrent spend, expiry, refunds, rewards or a whole batch as
+    evidence for a new unit-price multiplier. Exact charges require task records.
     """
-    actual = (balance_before - balance_after) + reward_credits
-    diff = actual - q.estimated_credits
+    observed = (balance_before - balance_after) + reward_credits
+    diff = observed - q.estimated_credits
     matched = abs(diff) <= DISCREPANCY_TOL
-
-    result: dict[str, Any] = {
-        "balance_before": balance_before,
-        "balance_after": balance_after,
+    recorded = load(store_path)["revision"]
+    result = {
+        "balance_before": balance_before, "balance_after": balance_after,
         "reward_credits": reward_credits,
-        "actual_credits": actual,
-        "table_credits": q.table_credits,
-        "budget_estimate": q.estimated_credits,
-        "diff": diff,
-        "matched": matched,
-        "recorded_revision": load(store_path)["revision"],
+        "actual_credits": None,
+        "observed_credits": observed,
+        "observation_source": "balance_delta_plus_known_rewards_not_a_billing_receipt",
+        "table_credits": q.table_credits, "budget_estimate": q.estimated_credits,
+        "diff": diff, "matched": matched, "recorded_revision": recorded,
+        "needs_usage_review": not matched, "factor_updated": False,
     }
-
-    if not matched and actual > 0:
-        # 更新经验系数：实扣/表价（数量>1 时按单位）
-        try:
-            unit_actual = actual / q.quantity if q.quantity else actual
-            unit_table = q.table_credits / q.quantity if q.quantity else q.table_credits
-            if unit_table > 0:
-                new_factor = unit_actual / unit_table
-                old = get_factor(q.model_key, q.resolution, q.variant)
-                # 取保守（较大）系数，避免单次异常拉低预算
-                set_factor(q.model_key, q.resolution, max(old, new_factor), q.variant)
-                result["factor_updated"] = {"old": old, "new": round(new_factor, 3)}
-        except Exception as e:  # 校准失败不影响核对结论
-            result["factor_error"] = str(e)[:120]
-
-    if not matched:
+    if matched:
+        result.update(stale=False, action="balance observation matches official quote; confirm exact charges in Credit Details")
+    else:
         try:
             remote = remote_revision()
-            if remote != result["recorded_revision"]:
+            stale = remote != recorded
+            if stale:
                 mark_stale(store_path)
-                result["stale"] = True
-                result["action"] = (
-                    f"revision changed {result['recorded_revision']} -> {remote}; "
-                    "pricing table updated, call refresh() to re-record"
-                )
-            else:
-                result["stale"] = False
-                result["action"] = (
-                    "revision unchanged: systematic table-vs-actual gap; "
-                    "factor calibrated, table NOT marked stale"
-                )
-        except Exception as e:
-            result["stale"] = None
-            result["action"] = f"revision check failed: {str(e)[:120]}"
-    else:
-        result["stale"] = False
-        result["action"] = "matched"
-
+            result.update(stale=stale, action="refresh official price table" if stale else
+                "review matching task charges, expiry, refunds and rewards in Credit Details; official quote unchanged")
+        except Exception as exc:
+            result.update(stale=None, action="official revision check failed; quote unchanged", revision_error=str(exc)[:120])
     return result
 
 
@@ -480,7 +427,7 @@ def web_session_ok(buckets: Any, snapshot: Any) -> bool:
 
 def cmd_preflight(model: str, profile: str = "prod", resolution: str | None = None,
                   count: int = 1, seconds: float | None = None,
-                  ref_seconds: float = 0.0) -> dict[str, Any]:
+                  ref_seconds: float = 0.0, include_exploration: bool = True) -> dict[str, Any]:
     """生成前：余额 + 单价报价 + 按张数 assess + 探索快照（单 JSON 由 CLI 打印）。"""
     from dataclasses import asdict as _asdict
     q = quote(model, profile=profile, resolution=resolution,
@@ -498,7 +445,7 @@ def cmd_preflight(model: str, profile: str = "prod", resolution: str | None = No
         "balance": balance,
         "enough": a["enough"],
         "shortfall": a["shortfall"],
-        "exploration": exploration_snapshot(profile),
+        "exploration": exploration_snapshot(profile) if include_exploration else None,
     }
 
 
@@ -514,7 +461,8 @@ def cmd_postflight(model: str, profile: str = "prod", resolution: str | None = N
     这样校准层按单位回算（actual/count ÷ table/count）不会被总量污染。
     """
     from dataclasses import replace as _replace
-    count = max(1, int(count))
+    if isinstance(count, bool) or not isinstance(count, int) or count < 1:
+        raise ValueError("count must be a positive integer")
     q = quote(model, profile=profile, resolution=resolution,
               seconds=seconds, ref_seconds=ref_seconds)
     b1 = get_balance(profile)
@@ -562,6 +510,7 @@ if __name__ == "__main__":
         "factors", "set-factor", "buckets", "invite", "exploration",
         "preflight", "postflight",
     ])
+    ap.add_argument("--skip-exploration", action="store_true", help="Read-only pool pricing probe without opening web sessions")
     ap.add_argument("--model")
     ap.add_argument("--profile", default="prod")
     ap.add_argument("--resolution")
@@ -595,7 +544,7 @@ if __name__ == "__main__":
                       balance_after=a.balance_after, reward_credits=a.reward)
         _print_json(r)
     elif a.cmd == "factors":
-        _print_json(_calib_load())
+        _print_json({"used_for_quotes": False, "legacy_factors": _calib_load()})
     elif a.cmd == "set-factor":
         model, res, var = (a.key.split("|") + ["price"])[:3]
         set_factor(model, res, a.factor, var)
@@ -609,7 +558,7 @@ if __name__ == "__main__":
     elif a.cmd == "preflight":
         _print_json(cmd_preflight(a.model, profile=a.profile, resolution=a.resolution,
                                   count=a.count, seconds=a.seconds,
-                                  ref_seconds=a.ref_seconds))
+                                  ref_seconds=a.ref_seconds, include_exploration=not a.skip_exploration))
     elif a.cmd == "postflight":
         before = None
         if a.exploration_before:

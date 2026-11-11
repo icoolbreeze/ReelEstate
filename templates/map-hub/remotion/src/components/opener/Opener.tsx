@@ -1,6 +1,6 @@
 // @贝壳-TV listing opener v3 (v2 + assemble-then-type-flyin map text + 贝壳 data-source marks): archive-page multiplane (shotcraft MultiplaneReal layout logic) -> scanline-annotate-focus
 // -> dolly zoom (card pinned, world swells, map perspective deepens) -> card morphs into an offset photo pin (one take).
-// Data: src/data/listings.json (示例数据) + src/data/mapdata.json (Amap route / POIs in comp-plane px).
+// Data: src/data/listings.json (real listing facts; sample tag only when sampleData === true) + src/data/mapdata.json (Amap route / POIs in comp-plane px).
 import React from "react";
 import { AbsoluteFill, Easing, Img, interpolate, interpolateColors, staticFile, useCurrentFrame } from "remotion";
 import "../../fonts";
@@ -8,8 +8,12 @@ import { NUM, SANS, TITLE } from "../../fonts";
 import DATA from "../../episode/listings.json";
 import MAP from "../../episode/mapdata.json";
 import BRANDS from "../../episode/brands.json";
+import EP from "../../episode/episode.json";
 import SAT from "../../episode/sat.json";
 import { FlyText, shellStyle } from "./TypeFly";
+import { END_S, projectPoint, TY, type Cam } from "../../mapMotion";
+export type { Cam };
+export { END_S, TY };
 
 export const DURATION = 240;
 
@@ -50,15 +54,16 @@ export const EXT = [-640, -880, 2080, 1960];
 
 // ---------- timeline (frames @30) ----------
 export const T = {
-  driveEnd: 50,
-  scanA: 42, scanB: 62,
-  focusA: 78, focusB: 92,
-  dollyA: 92, dollyB: 146,
-  worldOutA: 104, worldOutB: 134,
-  mapInA: 98, mapInB: 130,
-  camA: 92, camB: 240,
-  morphA: 132, morphB: 152,
-  routeA: 156, routeB: 188,
+  // v8 tempo: fast scroll 0-28 (+6 f settle), then scan/focus/dolly tightened; route/title/metro cues stay on the narration
+  driveEnd: 30,
+  scanA: 32, scanB: 46,
+  focusA: 52, focusB: 62,
+  dollyA: 62, dollyB: 102,
+  worldOutA: 70, worldOutB: 98,
+  mapInA: 66, mapInB: 96,
+  camA: 62, camB: 240,
+  morphA: 102, morphB: 118,
+  routeA: 156, routeB: 172,
   titleA: 160, metroA: 184,
 };
 // v3 assemble-then-type-flyin cues (frames). Shells (wordless) first, then glyphs: big title first, small labels last.
@@ -80,7 +85,7 @@ type L = { id: string; community: string; district: string; layout: string; area
 const MID = DATA.mid as L[];
 const CI0 = MID.findIndex((l) => l.id === DATA.chosenId);
 const CHOSEN = MID[CI0];
-const NSLOT = 12, CI = 9;
+const NSLOT = 20, CI = 9;   // v8 tempo: more real cards whizz past (slots cycle the 9 real CRM listings)
 const SLOT: L[] = Array.from({ length: NSLOT }, (_, j) => {
   let i = (((j - CI + CI0) % MID.length) + MID.length) % MID.length;
   if (i === CI0 && j !== CI) i = (i + 1) % MID.length;
@@ -93,14 +98,22 @@ const CW = 320, PAD = 14, PW = CW - 2 * PAD, PH = 182, CH = 340, GUT = 48, PITCH
 const Y0 = 372, OFF = 40;                       // mid row top; alternate cards drop OFF px (reference: (k%2)*40)
 const D = 2600;                                 // drive travel at coefficient 1
 const K = { bg: 0.35, mid: 0.7, fg: 1.4 };
-const midX = (k: number, drive: number) => 720 - CW / 2 + (k - CI) * PITCH + K.mid * (D - drive);
+const DM = 4200;                                // card-row travel (more cards pass than the 2600 page travel)
+const midX = (k: number, drive: number) => 720 - CW / 2 + (k - CI) * PITCH + SWIPE_DIR * K.mid * DM * (1 - drive / D);
 const midY = (k: number) => Y0 + (k % 2 === CI % 2 ? 0 : OFF);
-const DRV = { f0: -4, a: 38, b: 50 };            // constant speed then cubic brake with matched entry velocity
+const DRV = { f0: -2, a: 20, b: 28, settle: 6, over: 0.03 };   // v8 tempo: ~28 f fast scroll, hard brake past the mark, spring back            // constant speed then cubic brake with matched entry velocity
 const DRV_V = 3 / (3 * (DRV.a - DRV.f0) + (DRV.b - DRV.a)), DRV_PA = DRV_V * (DRV.a - DRV.f0);
+// v8 (ep02 feedback): no leftward swipe of the listing cards; the page is at rest from frame 0 (scan/verdict/dim feedback unchanged).
+// Set OPENER_SWIPE = true to restore the multiplane drive.
+// v8 scroll (user 10-20 8:36 房源快速滑动仍需保留): fast scroll restored, but NOT leftward: cards travel rightward (SWIPE_DIR -1).
+const OPENER_SWIPE = true;
+const SWIPE_DIR = -1;
 const driveAt = (f: number) => {
+  if (!OPENER_SWIPE) return D;
   if (f <= DRV.a) return D * Math.max(0, DRV_V * (f - DRV.f0));
-  const u = Math.min(1, (f - DRV.a) / (DRV.b - DRV.a));
-  return D * (DRV_PA + (1 - DRV_PA) * (1 - Math.pow(1 - u, 3)));
+  if (f <= DRV.b) { const u = (f - DRV.a) / (DRV.b - DRV.a); return D * (DRV_PA + (1 + DRV.over - DRV_PA) * (1 - Math.pow(1 - u, 3))); }
+  const t = Math.min(1, (f - DRV.b) / DRV.settle);   // overshoot -> damped return onto the featured card
+  return t >= 1 ? D : D * (1 + DRV.over * Math.exp(-3 * t) * Math.cos(Math.PI * 1.5 * t) * (1 - t));
 };
 
 // ---------- scan targets ----------
@@ -119,21 +132,13 @@ const chosenFt = TARGETS.find((t) => t.k === CI)!.ft;
 export const CUES = { targets: TARGETS.map((t) => t.ft).sort((a, b) => a - b), chosenFt };
 
 // ---------- 3D map camera (proj() mirrors the CSS on <MapPlane>) ----------
-export const TY = 60;
 const LST = MAP.listing.xy as number[];
 const SNAP = [[4, 10, 0, -2], [11, 11, -6.5, -2], [12, 19, -6.5, 0]]; // display-only shift onto road centre (same as koubo ep07), route_m untouched
 export const ROUTE = (MAP.route as number[][]).map((p, i) => { const s = SNAP.find((q) => i >= q[0] && i <= q[1]); return s ? [p[0] + s[2], p[1] + s[3]] : p; });
 const METRO = (MAP.pois as any[]).find((p) => p.kind === "metro");
-export type Cam = { s: number; fx: number; fy: number; tilt: number; P: number };
-export const proj = (c: Cam, x: number, y: number) => {
-  const th = (c.tilt * Math.PI) / 180;
-  const dx = (x - c.fx) * c.s, dy = (y - c.fy) * c.s;
-  const X = 720 + dx, Y = 540 + TY + dy * Math.cos(th), Z = dy * Math.sin(th);
-  const k = c.P / (c.P - Z);
-  return { x: 720 + (X - 720) * k, y: 540 + (Y - 540) * k, k };
-};
+export const proj = projectPoint;
 // camera settles CAM_SETTLE frames before the opener ends (marks land on a still map); END_S widens the final framing
-export const CAM_SETTLE = 16, END_S = 1.72;
+export const CAM_SETTLE = 16;
 export const camAt = (f: number): Cam => {
   f = Math.min(f, T.camB - CAM_SETTLE);
   const s = lerp(0.3, END_S, seg(f, T.camA, T.camB - CAM_SETTLE, Easing.bezier(0.5, 0, 0.3, 1)));
@@ -174,7 +179,7 @@ const CardBody: React.FC<{ l: L; th: Theme }> = ({ l, th }) => (
     </div>
     <div style={{ position: "absolute", left: PAD, top: PAD + PH + 92, width: PW, height: 1, background: th.hair }} />
     <div style={{ position: "absolute", left: PAD, top: PAD + PH + 104, display: "flex", gap: 6 }}>
-      {(l.tags.length ? l.tags : [l.layout.slice(0, 2), "示意"]).slice(0, 3).map((t) => (
+      {(l.tags.length ? l.tags : [l.layout.slice(0, 2)] /* v8: real CRM cards, no 示意 chip */).slice(0, 3).map((t) => (
         <div key={t} style={{ flexShrink: 0, whiteSpace: "nowrap", padding: "2px 9px 3px", borderRadius: 12, border: `1px solid ${th.chip}`, fontFamily: SANS, fontWeight: 500, fontSize: 12.5, color: th.sub, lineHeight: 1.3 }}>{t}</div>
       ))}
     </div>
@@ -283,6 +288,7 @@ export const Opener: React.FC<{ theme?: "dark" | "light"; map?: "A" | "B" | "flo
   const MAPI = { ink: pal.ink, accent: pal.accent, grey: pal.sub, paper: pal.ink };
   const f = useCurrentFrame();
   const drive = driveAt(f);
+  const mblur = Math.min(9, Math.abs(driveAt(f + 0.5) - driveAt(f - 0.5)) * K.mid * (DM / D) * 0.045);   // speed-based motion blur on the card row
 
   // focus / dolly
   const focus = seg(f, T.focusA, T.focusB, E_OUT);
@@ -372,10 +378,10 @@ export const Opener: React.FC<{ theme?: "dark" | "light"; map?: "A" | "B" | "flo
       {/* ===== card world: archive page (0.35) / card row (0.7) / sparse foreground (1.4) ===== */}
       {worldO > 0.001 && (
         <AbsoluteFill style={{ transform: `scale(${worldScale})`, transformOrigin: "720px 540px", filter: worldBlur > 0.05 ? `blur(${worldBlur}px)` : undefined, opacity: worldO }}>
-          <div style={{ position: "absolute", inset: 0, transform: `translateX(${-drive * K.bg}px) scale(1.05)`, transformOrigin: "720px 540px", filter: th.bgFilter, opacity: th.bgO * (1 - 0.35 * othersDim) }}>
+          <div style={{ position: "absolute", inset: 0, transform: `translateX(${(-D + SWIPE_DIR * (D - drive)) * K.bg}px) scale(1.05)`, transformOrigin: "720px 540px", filter: th.bgFilter, opacity: th.bgO * (1 - 0.35 * othersDim) }}>
             <ArchivePage th={th} />
           </div>
-          <AbsoluteFill style={{ filter: othersDim > 0.01 ? `blur(${3.5 * othersDim}px)` : undefined }}>
+          <AbsoluteFill style={{ filter: (othersDim > 0.01 || mblur > 0.3) ? `blur(${(3.5 * othersDim + mblur).toFixed(2)}px)` : undefined }}>
             {SLOT.map((l, k) => {
               if (k === CI) return null;
               const x = midX(k, drive);
@@ -385,7 +391,7 @@ export const Opener: React.FC<{ theme?: "dark" | "light"; map?: "A" | "B" | "flo
               return <Card key={k} l={l} th={th} x={x} y={midY(k)} dim={Math.min(1, dim)} />;
             })}
           </AbsoluteFill>
-          <div style={{ position: "absolute", inset: 0, transform: `translateX(${-drive * K.fg}px)`, filter: "blur(3px)" }}>
+          <div style={{ position: "absolute", inset: 0, transform: `translateX(${(-D + SWIPE_DIR * (D - drive)) * K.fg}px)`, filter: "blur(3px)" }}>
             <div style={{ position: "absolute", left: 980, top: 196 }}><SearchBar th={th} /></div>
             <div style={{ position: "absolute", left: 2780, top: 0, transform: "scale(1.12)", transformOrigin: "0 0" }}><Card l={arch(DATA.fgCard)} th={th} x={0} y={770} /></div>
           </div>
@@ -492,7 +498,7 @@ export const Opener: React.FC<{ theme?: "dark" | "light"; map?: "A" | "B" | "flo
           <div style={{ position: "absolute", left: 96, top: 760 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, fontFamily: SANS, fontWeight: 600, fontSize: 19, color: pal.sub, letterSpacing: 1 }}>
               <div style={{ width: 28, height: 3, borderRadius: 2, background: MAPI.accent, ...shellStyle(f, [-180, 0], 0, TF.epBar) }} />
-              <FlyText seed={60} start={TF.ep} step={TF.smallStep} runs={[{ s: "@贝壳-TV" }, { s: "EP.07", style: { fontFamily: NUM, fontStyle: "italic", marginLeft: 12 } }]} />
+              <FlyText seed={60} start={TF.ep} step={TF.smallStep} runs={[{ s: "@贝壳-TV" }, { s: (EP as { episodeTag?: string }).episodeTag ?? "EP.01", style: { fontFamily: NUM, fontStyle: "italic", marginLeft: 12 } }]} />
             </div>
             <div style={{ display: "flex", alignItems: "center", marginTop: 4, fontFamily: TITLE, fontWeight: 700, fontSize: 84, color: pal.ink, lineHeight: 1.1 }}>
               <span style={{ display: "inline-block", color: MAPI.accent, ...shellStyle(f, [-220, 30], -8, TF.braces) }}>{"{"}</span>
@@ -530,7 +536,7 @@ export const Opener: React.FC<{ theme?: "dark" | "light"; map?: "A" | "B" | "flo
               {BRANDS.row.map((b, i) => (
                 <div key={b.name} style={it(2 + i, { marginRight: 30, opacity: 0.5 * p(2 + i) })}><Mono file={b.file} ar={b.ar} h={b.h} color={ink} /></div>
               ))}
-              <div style={it(6, { marginLeft: "auto", fontSize: 13, fontWeight: 500, color: muteC, letterSpacing: 1, whiteSpace: "nowrap" })}>房源卡片为示例数据 · 非实时房源</div>
+              {(DATA as any).sampleData === true && (DATA as any).sampleTag && <div style={it(6, { marginLeft: "auto", fontSize: 13, fontWeight: 500, color: muteC, letterSpacing: 1, whiteSpace: "nowrap" })}>房源卡片为示例数据 · 非实时房源</div>}
             </div>
           </>
         );
@@ -538,9 +544,9 @@ export const Opener: React.FC<{ theme?: "dark" | "light"; map?: "A" | "B" | "flo
 
       {/* ===== chrome ===== */}
       <div style={{ position: "absolute", left: 60, top: 54, display: chrome ? "flex" : "none", gap: 12, alignItems: "center" }}>
-        <div style={{ padding: "3px 10px 4px", borderRadius: 6, border: `1.5px solid ${ink}`, opacity: 0.85, color: ink, fontFamily: SANS, fontWeight: 700, fontSize: 15 }}>{DATA.sampleTag}</div>
+        {(DATA as any).sampleData === true && (DATA as any).sampleTag && <div style={{ padding: "3px 10px 4px", borderRadius: 6, border: `1.5px solid ${ink}`, opacity: 0.85, color: ink, fontFamily: SANS, fontWeight: 700, fontSize: 15 }}>{DATA.sampleTag}</div>}
         <div style={{ fontFamily: SANS, fontWeight: 500, fontSize: 14, color: inkSub }}>
-          {mapTag > 0.5 ? (isFix ? SATFIX_CREDIT : isSat ? SAT.credit : (map === "flovaSat3D" || map === "flovaSat3Db") ? FLOVASAT3D_CREDIT : "示意图　房源照片AI示意　底图据高德数据绘制　路线、距离 © 高德地图") : "房源照片为AI示意或图库示意"}
+          {mapTag > 0.5 ? (isFix ? SATFIX_CREDIT : isSat ? SAT.credit : (map === "flovaSat3D" || map === "flovaSat3Db") ? ((DATA as any).mapCredit ?? FLOVASAT3D_CREDIT) : "示意图　房源照片AI示意　底图据高德数据绘制　路线、距离 © 高德地图") : "房源照片为AI示意或图库示意"}
         </div>
       </div>
       <div style={{ position: "absolute", left: 60, top: 96, display: "flex", gap: 8, opacity: chromeO }}>

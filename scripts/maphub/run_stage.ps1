@@ -8,8 +8,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $R = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $episode = [IO.Path]::GetFullPath((Join-Path $R $Ep))
-$series = [IO.Path]::GetFullPath((Join-Path $R 'projects\map-hub')) + [IO.Path]::DirectorySeparatorChar
-if (-not $episode.StartsWith($series, [StringComparison]::OrdinalIgnoreCase)) { throw 'Episode must be inside projects/map-hub' }
+$roots = @('projects\listing') | ForEach-Object { [IO.Path]::GetFullPath((Join-Path $R $_)) + [IO.Path]::DirectorySeparatorChar }
+if (-not ($roots | Where-Object { $episode.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) })) { throw 'Episode must be inside projects/listing' }
 $J = Join-Path $episode 'jobs'
 $taskFile = Join-Path $J "$Stage.md"
 if (-not (Test-Path $taskFile -PathType Leaf)) { throw "Missing task file: $taskFile" }
@@ -48,3 +48,4 @@ $p = Start-Process -FilePath $exe -ArgumentList $argv -WorkingDirectory $R -Wind
 $record.pid = $p.Id; $record.status = 'started'
 [IO.File]::WriteAllText((Join-Path $J "$Stage.job.json"), ($record | ConvertTo-Json), (New-Object Text.UTF8Encoding $false))
 "started $Stage executor=$selected pid=$($p.Id)"
+

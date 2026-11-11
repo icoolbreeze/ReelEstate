@@ -22,7 +22,10 @@ def main():
             remove(Image.open(p), session=sess, alpha_matting=True, post_process_mask=True).save(td / ("a" + p.name[1:]))
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-framerate", a.fps, "-i", str(td / "a_%05d.png"), "-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p",
                         "-b:v", "0", "-crf", "24", "-auto-alt-ref", "0", str(out)], check=True)
-    print("->", out)
+    import hashlib, json
+    sha = hashlib.sha256(src.read_bytes()).hexdigest()
+    out.with_suffix(".json").write_text(json.dumps({"source": src.name, "source_sha256": sha, "fps": a.fps}, indent=2) + "\n", encoding="utf-8")
+    print("->", out, "(sidecar records the source segment sha256; check_matte.py verifies frame sync)")
 
 if __name__ == "__main__":
     main()

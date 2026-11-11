@@ -97,3 +97,26 @@ kernel 需要联网（`enable_internet`）以 pip 安装依赖、下载模型权
 - 源片必须是 1280×720、24fps。别的分辨率或帧率会失败。输出是 1920×1080，原音轨按流拷贝，播放速度不变。每次只推一条视频。
 - 内核要联网，用来克隆上游仓库并下载权重。加速器保持默认 `NvidiaTeslaT4`（一次会话两张 T4）。后台可以同时跑两个这样的会话，用来并行处理两条视频。每条视频一个 run、一个 kernel、一份本地输出。浏览器里的交互式 GPU 笔记本会占掉唯一的交互名额，推送前先关掉。
 - 已经测过的参数不要改：3B FP16、batch 9、tile 256 / overlap 32、BlockSwap 24、批与批重叠 0、两张卡接缝重叠 3 帧、不传 `--cuda_device`。
+
+## Python 环境（必须用 conda base）
+
+所有 Kaggle 命令都用用户 PowerShell `(base)` 的那个 Python：`C:\ProgramData\miniconda3\python.exe`（Kaggle CLI 2.2.4，OAuth 登录只在这个环境里）。
+`C:\Python313\python.exe` 等其他 Python 读不到登录，会误报"掉线"。`_common.run()` 优先用 `<当前 python> -m kaggle`，所以脚本也要用这个 Python 启动：
+
+    C:\ProgramData\miniconda3\python.exe scripts\kaggle\push_job.py --check
+
+## 排队策略（Kaggle 队列）
+
+提交后不等排队。`push_job.py` 每次 push 后只短暂查状态（`--queue-wait`，默认 45 秒）：
+仍是 QUEUED 就立刻取消该 session（CLI 无 cancel，用 `kernels delete -y <kernel>`），然后重新 push，**最多共 10 次**（`--max-attempts`）。
+任务类型用 `--kind sr|tts|matting|other` 显式指定（不指定时按 kernel 推断：seedvr2→sr，tts_*→tts，matting_*→matting）。
+
+10 次都排队或失败时：
+
+| kind | 退出码 | 处理 |
+|---|---|---|
+| sr（超分 SeedVR2，可选） | 23 | 跳过超分，**保留 lanczos 版本照常交付**，报告里注明（2026-10-19 起；原为 20 停止流程） |
+| tts（IndexTTS） | 21 | `push_indextts25.py` 自动改用本地 F5：`scripts\voice\clone_tts_f5.cmd <同一 narration.json> --episode <EP> --out <EP>\voice\f5_fallback_<run>`，参考音同为 `ref_phone_v1`，然后继续 |
+| matting / other | 22 | 停止并上报 |
+
+测试（不调用 Kaggle）：`push_job.py ... --dry-run --mock-status queued`（或 `queued,running` 等序列）；`push_indextts25.py ... --dry-run --mock-queued` 会演示 F5 回退命令。

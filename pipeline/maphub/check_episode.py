@@ -8,6 +8,7 @@ from pathlib import Path
 from workspace import episode_path
 from voice_config import read_yaml
 from voice_timing import fingerprint
+from overlay_contract import validate_overlay_contract
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -117,16 +118,32 @@ def check_episode(value, draft=False, heygen=False):
         except (OSError, ValueError, KeyError) as exc:
             errors.append("invalid HeyGen plan/hook alpha: " + type(exc).__name__)
     episode = json.loads((ep / "episode.json").read_text(encoding="utf-8-sig"))
+    overlay_hub = load("hub.json") if (data / "hub.json").is_file() else {}
+    overlay_annotations = load("annotations.json") if (data / "annotations.json").is_file() else {}
+    errors.extend(validate_overlay_contract(episode, overlay_hub, overlay_annotations))
     if not draft and episode.get("sampleData") is not True and episode.get("category", settings.get("category")) != "knowledge":
-        if not (ep / "project.json").is_file():
-            errors.append("live listing needs project.json for the existing compliance checker")
+        if not (ep / "compliance.json").is_file():
+            errors.append("live listing needs compliance.json for publication checks; complete compliance.json.draft with verified details")
         else:
             sys.path.insert(0, str(REPO / "pipeline"))
             sys.path.insert(0, str(REPO / "pipeline/check"))
             import check as checker
-            report = checker.run(ep)
-            if report.failed:
-                errors.append("live listing compliance failed; run npm run check -- " + str(ep.relative_to(REPO)))
+            try:
+                report = checker.run(ep)
+                if report.failed:
+                    errors.append("live listing compliance failed; run python pipeline/check/check.py " + str(ep.relative_to(REPO)) + " --json for details")
+            except (OSError, ValueError, TypeError) as exc:
+                errors.append("invalid compliance.json or publication inputs: " + str(exc))
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    from pipeline.common.color_restore import gate   # D-Log M colour gate (all content lines)
+    color_errors, color_warnings = gate(ep)
+    errors += color_errors
+    warnings += color_warnings
+    from pipeline.common.raw_manifest import validate as validate_manifest   # footage/raw_manifest.json
+    manifest_errors, manifest_warnings = validate_manifest(ep)
+    errors += manifest_errors
+    warnings += manifest_warnings
     return {"pass": not errors, "draft": draft, "errors": errors, "warnings": warnings}
 
 def main():
@@ -141,3 +158,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

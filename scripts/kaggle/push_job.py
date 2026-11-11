@@ -7,13 +7,77 @@ python scripts/kaggle/push_job.py --episode projects/rental/<ep> --job matting \
 One video input gets its own --run (from the filename) so a second video
 uses another dataset, kernel, and local directory. A run whose kernel is
 still queued or running is not pushed again.
+
+Queue policy (--kind sr|tts|matting|other): after each push the status is polled
+briefly (--queue-wait seconds). A kernel still QUEUED is deleted (Kaggle has no
+cancel; delete stops the session) and pushed again, up to --max-attempts (10).
+When every attempt stays queued or fails the script exits with:
+  23 = sr   -> super-res skipped: keep the lanczos version and deliver normally (not a pipeline failure)
+  21 = tts  -> caller falls back to local F5 (scripts/voice/clone_tts_f5.cmd)
+  22 = other/matting -> stop and report
+Test without Kaggle: --dry-run --mock-status queued[,queued,running...]
+Run with the conda base python: C:/ProgramData/miniconda3/python.exe
 """
 import argparse, datetime, json, os, shutil, sys, tempfile, time
 from pathlib import Path
 from _common import (REPO, cred_status, username, run, episode_dir, slug,
-                     job_dir, kaggle_exe, run_token, sanitize_run)
+                     job_dir, kaggle_exe, kaggle_cmd, run_token, sanitize_run)
 
 KERNELS = Path(__file__).resolve().parent / "kernels"
+EXIT_SR_SKIPPED, EXIT_TTS_FALLBACK, EXIT_OTHER_STOP = 23, 21, 22   # 2026-10-19: SR failure no longer stops the pipeline (was 20)
+KIND_EXIT = {"sr": EXIT_SR_SKIPPED, "tts": EXIT_TTS_FALLBACK}
+
+
+def infer_kind(kernel):
+    k = (kernel or "").lower()
+    if k.startswith("seedvr") or "upscale" in k or "sr" == k:
+        return "sr"
+    if k.startswith("tts"):
+        return "tts"
+    if "matting" in k:
+        return "matting"
+    return "other"
+
+
+def queue_exhausted(kind, attempts, last):
+    msg = {"sr": "超分 Kaggle 任务 %d 次都在排队/失败，跳过超分，保留 lanczos 版本照常交付（在报告里注明）。",
+           "tts": "语音 Kaggle 任务 %d 次都在排队/失败，改用本地 F5。",
+           }.get(kind, "Kaggle 任务 %d 次都在排队/失败，停止并上报。") % attempts
+    print(f"QUEUE_POLICY kind={kind} attempts={attempts} last={last}: {msg}", file=sys.stderr)
+    sys.exit(KIND_EXIT.get(kind, EXIT_OTHER_STOP))
+
+
+def push_with_queue_policy(push, status, cancel, kind, max_attempts=10,
+                           queue_wait=45, poll=15, sleep=time.sleep):
+    """push() -> bool ok; status() -> lowercase text; cancel() deletes the session.
+    Returns on the first attempt that leaves the queue; otherwise exits by kind."""
+    last = "none"
+    for n in range(1, max_attempts + 1):
+        if not push():
+            last = "push-failed"
+            print(f"attempt {n}/{max_attempts}: push failed", file=sys.stderr)
+            sleep(5)
+            continue
+        waited, st = 0, ""
+        while True:
+            st = status()
+            if "queued" not in st or waited >= queue_wait:
+                break
+            sleep(poll); waited += poll
+        if "queued" in st:
+            last = "queued"
+            print(f"attempt {n}/{max_attempts}: still QUEUED after {waited}s, cancelling and re-pushing",
+                  file=sys.stderr)
+            cancel()
+            sleep(5)
+            continue
+        if "error" in st or "cancel" in st:
+            last = st.strip() or "error"
+            print(f"attempt {n}/{max_attempts}: {last}", file=sys.stderr)
+            continue
+        print(f"attempt {n}/{max_attempts}: {st.strip() or 'started'}")
+        return n
+    queue_exhausted(kind, max_attempts, last)
 
 
 def main():
@@ -28,10 +92,15 @@ def main():
     ap.add_argument("--accelerator", default="NvidiaTeslaT4")
     ap.add_argument("--run", help="isolate this session from other runs of the same job")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--kind", choices=["sr", "tts", "matting", "other"],
+                    help="job type for the queue policy (default: from --kernel)")
+    ap.add_argument("--max-attempts", type=int, default=10)
+    ap.add_argument("--queue-wait", type=int, default=45, help="seconds to tolerate QUEUED per attempt")
+    ap.add_argument("--mock-status", help="with --dry-run: comma list of statuses to simulate the queue policy")
     a = ap.parse_args()
 
     if a.check:
-        print("cli:", kaggle_exe())
+        print("cli:", " ".join(kaggle_cmd()))
         c = cred_status()
         print("credentials:", c or "missing")
         sys.exit(0 if c else 1)
@@ -76,9 +145,22 @@ def main():
            "kernel": a.kernel, "inputs": names, "params": params,
            "output_dir": (jd / "output").relative_to(ep).as_posix(),
            "pushed_at": datetime.datetime.now().isoformat(timespec="seconds")}
+    a.kind = a.kind or infer_kind(a.kernel)
+    job["kind"] = a.kind
     print(json.dumps(job, ensure_ascii=False, indent=2))
     if a.dry_run:
         print("dry-run: nothing uploaded")
+        if a.mock_status:
+            seq = [x.strip().lower() for x in a.mock_status.split(",") if x.strip()]
+            it = iter(seq)
+            last = [seq[-1]]
+            def st():
+                last[0] = next(it, last[0]); return last[0]
+            n = push_with_queue_policy(lambda: (print("mock push"), True)[1], st,
+                                       lambda: print("mock cancel (kernels delete -y)"),
+                                       a.kind, a.max_attempts, a.queue_wait, poll=a.queue_wait or 1,
+                                       sleep=lambda s: None)
+            print(f"mock: left the queue on attempt {n}")
         return
 
     lock = _acquire_lock(jd / ".push.lock")
@@ -204,12 +286,19 @@ def _upload_and_record(a, ep, user, s, files, job, jd, tpl):
             meta["docker_image"] = T4_DOCKER_IMAGE
         (kd / "kernel-metadata.json").write_text(
             json.dumps(meta) + "\n", encoding="utf-8", newline="\n")
-        r = run(["kernels", "push", "-p", str(kd), "--accelerator", a.accelerator], check=False)
-        if r.returncode != 0 and "accelerator" in (r.stderr + r.stdout).lower():
-            r = run(["kernels", "push", "-p", str(kd)])  # older CLI without --accelerator
-        elif r.returncode != 0:
-            sys.exit(f"kernel push failed:\n{r.stdout}\n{r.stderr}")
-        print(r.stdout.strip())
+        def push():
+            r = run(["kernels", "push", "-p", str(kd), "--accelerator", a.accelerator], check=False)
+            if r.returncode != 0 and "accelerator" in (r.stderr + r.stdout).lower():
+                r = run(["kernels", "push", "-p", str(kd)], check=False)  # older CLI
+            if r.returncode != 0:
+                print(f"kernel push failed:\n{r.stdout}\n{r.stderr}", file=sys.stderr)
+                return False
+            print(r.stdout.strip())
+            return True
+        status = lambda: run(["kernels", "status", kernel_ref], check=False).stdout.lower()
+        cancel = lambda: run(["kernels", "delete", "-y", kernel_ref], check=False)
+        job["attempts"] = push_with_queue_policy(push, status, cancel, a.kind,
+                                                 a.max_attempts, a.queue_wait)
 
     job["ref"] = kernel_ref
     (jd / "job.json").write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n",

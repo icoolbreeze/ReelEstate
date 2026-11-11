@@ -7,6 +7,17 @@
       "env": {
         "FLOVA_BIN": "C:/Users/shipi/AppData/Local/Programs/flova/flova.exe"
       }
+    },
+    "davinci-resolve": {
+      "type": "stdio",
+      "command": "C:/Users/shipi/vswp/ReelEstate/tools/davinci-resolve-mcp/runtime/venv/Scripts/python.exe",
+      "args": ["C:/Users/shipi/vswp/ReelEstate/tools/davinci-resolve-mcp/node_modules/davinci-resolve-mcp/src/server.py"],
+      "env": {
+        "RESOLVE_SCRIPT_API": "C:/ProgramData/Blackmagic Design/DaVinci Resolve/Support/Developer/Scripting",
+        "RESOLVE_SCRIPT_LIB": "C:/Program Files/Blackmagic Design/DaVinci Resolve/fusionscript.dll",
+        "PYTHONPATH": "C:/ProgramData/Blackmagic Design/DaVinci Resolve/Support/Developer/Scripting/Modules",
+        "PYTHONHOME": "C:/Python313"
+      }
     }
   }
 }

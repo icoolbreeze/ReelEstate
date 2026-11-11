@@ -4,7 +4,7 @@
 
 ## 1. 结构
 1. **开场**：multiplane 筛卡 → 扫描选中 → dolly zoom 进地图（`components/opener/Opener.tsx`，240 帧）。冷开场的钩子句压在开场上（L01–L02），不放结论。
-2. **主持人**：开场后第一句给房源三要素（户型/面积/租金）并声明"示例数据"。
+2. **主持人**：开场后第一句给房源三要素（户型/面积/租金）（真实数据，只用 CRM/高德/开发商资料；仅当 sampleData=true 时才声明"示例数据"）。
 3. **地图目录**（PIP）：一句话交代"点到哪讲到哪"，标记按"房间→小区→周边"逐类装配出现（assemble-then-type-flyin 的 shell 飞入）。这一句带 dialogue-duet：两枚具名光标（"你"/"主持人"）靠近、名牌一亮一暗交接，之后只留"主持人"光标。
 4. **样板间**：地图上三张带照片的卡（客厅 / 卧室 / 厨卫）钉在房源针旁边。每张卡点一次进一组（2 条 B-roll），讲完缩回卡片。
 5. **小区环境**：一个"小区环境（示意）"针，一次点击进 3 条（绿化 / 楼间距 / 出入口），口播里必须说明是 AI 示意画面。
@@ -35,8 +35,8 @@
 - 版式：`OPENER` / `A`（主持人全屏，硬切，第二个字幕块 1.18× 推近）/ `PIP`（地图 + 右下 330×248 主持人小窗）/ `B`（段落 B-roll）。
 - 主持人全屏占比：本片 24%，低于口播规则的 35%，原因是地图段用 PIP 承担"人在讲图"。若要更像口播，把 L11/L16/L20 改成 A。
 - 品牌条全片常驻（链家 / 德佑 / 富房 / CENTURY 21），浅色段纸色底，深色段（主持人、B-roll）暗色底白字；其他地方不出现贝壳 logo 和"房源信息来源"。
-- 左上常驻"示例数据" + 当前画面的来源说明（地图署名 / AI生成示意 非实拍 / 主持人画面为AI生成）。
+- 当前画面的来源说明（"示例数据"仅在 sampleData=true 时出现）（地图署名 / AI生成示意 非实拍 / 主持人画面为AI生成）。
 - Muse 主持人片段有原声但没有对口型：成片只用 TTS，主持人画面静音。
 
 ## ReelEstate port (2026-10-10)
-Runbook: docs/RUNBOOK-map-hub-koubo.md (taste rules at the end). Code: templates/map-hub, pipeline/maphub. Episodes: projects/map-hub/<ep>/.
+Runbook: docs/RUNBOOK-map-hub-koubo.md (taste rules at the end). Code: templates/map-hub, pipeline/maphub. Episodes: projects/listing/<ep>/.

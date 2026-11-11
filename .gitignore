@@ -21,25 +21,8 @@ venv/
 # ---- 渲染输出（任意位置的 output/ 目录）----
 output/
 
-# ---- 房源项目：私有素材，默认全部忽略 ----
-# 只保留 _example 示例项目和各分类目录的 .gitkeep
+# ---- 视频期：私有素材，全部忽略（projects/listing|knowledge|interview）----
 /projects/*
-!/projects/_example/
-!/projects/rental/
-!/projects/resale/
-!/projects/new-home/
-/projects/rental/*
-!/projects/rental/.gitkeep
-/projects/resale/*
-!/projects/resale/.gitkeep
-/projects/new-home/*
-!/projects/new-home/.gitkeep
-# 即使在 _example 里，也不提交音视频
-/projects/**/*.wav
-/projects/**/*.mp3
-/projects/**/*.mp4
-/projects/**/*.mov
-/projects/**/*.m4a
 
 # ---- 声音克隆参考音频（私有，需本人书面授权）----
 /voices/clone/*
@@ -66,9 +49,6 @@ desktop.ini
 !/assets/warehouse/README.md
 !/assets/warehouse/SOURCES.json
 
-# ---- 动效抽取历史（本机，避开最近 5 条视频用过的效果）----
-/projects/.effects-history.json
-
 # ---- CosyVoice (voice clone; repo + venv + models, local only) ----
 /vendor/cosyvoice/
 /vendor/f5tts/
@@ -76,29 +56,28 @@ desktop.ini
 /vendor/matanyone2/
 /vendor/indextts2/
 
-# ---- map-hub 口播 template + episodes (docs/RUNBOOK-map-hub-koubo.md) ----
+# ---- listing 房源 (templates/map-hub; episodes in projects/listing stay local) ----
 /templates/map-hub/remotion/public
 /templates/map-hub/remotion/src/episode
 /templates/map-hub/remotion/.current-episode
 /templates/map-hub/shared/public/fonts/
-!/projects/map-hub/
-/projects/map-hub/*
-!/projects/map-hub/README.md
-!/projects/map-hub/ep07-xihu/
-/projects/map-hub/ep07-xihu/*
-!/projects/map-hub/ep07-xihu/README.md
-!/projects/map-hub/ep07-xihu/episode.json
-!/projects/map-hub/ep07-xihu/pois.json
-!/projects/map-hub/ep07-xihu/pois.md
-!/projects/map-hub/ep07-xihu/shots.json
-!/projects/map-hub/ep07-xihu/script_v*.json
-!/projects/map-hub/ep07-xihu/script_v*.md
-!/projects/map-hub/ep07-xihu/heygen_segments.md
-!/projects/map-hub/ep07-xihu/data/
-!/projects/map-hub/ep07-xihu/muse_prompts/
-!/projects/map-hub/ep07-xihu/annotations/
-/projects/map-hub/ep07-xihu/annotations/*.mp4
-/projects/map-hub/ep07-xihu/annotations/**/*.jpg
+!/projects/listing/
+/projects/listing/*
+!/projects/listing/README.md
+
+# ---- knowledge 口播 series (docs/RUNBOOK-knowledge-koubo.md; episodes stay local) ----
+/templates/knowledge/remotion/public
+/templates/knowledge/remotion/src/episode
+!/projects/knowledge/
+/projects/knowledge/*
+!/projects/knowledge/README.md
+
+# ---- interview / 小ONE会客厅 (docs/RUNBOOK-interview.md; episodes stay local) ----
+/templates/interview/remotion/public
+/templates/interview/remotion/src/episode
+!/projects/interview/
+/projects/interview/*
+!/projects/interview/README.md
 
 # ---- shared presenter profiles (yaml tracked, media local) ----
 /assets/presenter/*/media/
@@ -115,3 +94,9 @@ jobs/agent/
 /assets/presenter/*/voice/
 /.wrangler/
 /projects/**/work/
+
+
+# Canonical shared runtime/assets and local optimization evidence
+/templates/shared/public/fonts/
+/tools/remotion/node_modules/
+/tmp/

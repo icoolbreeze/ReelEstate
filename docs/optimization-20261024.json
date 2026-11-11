@@ -1,0 +1,98 @@
+{
+  "completed": true,
+  "date": "2026-10-24",
+  "episodes": [
+    {
+      "episode": "ep02-zidong",
+      "path": "projects/listing/ep02-zidong",
+      "before_bytes": 8133630538,
+      "after_unique_bytes": 6184847756,
+      "after_logical_bytes": 6911244067,
+      "before_GiB": 7.575,
+      "after_GiB": 5.76,
+      "saved_bytes": 1948782782
+    },
+    {
+      "episode": "ep01-intro",
+      "path": "projects/knowledge/ep01-intro",
+      "before_bytes": 3807212995,
+      "after_unique_bytes": 3721780763,
+      "after_logical_bytes": 3807212995,
+      "before_GiB": 3.546,
+      "after_GiB": 3.466,
+      "saved_bytes": 85432232
+    },
+    {
+      "episode": "ep07-xihu",
+      "path": "projects/listing/ep07-xihu",
+      "before_bytes": 3714567371,
+      "after_unique_bytes": 3621445457,
+      "after_logical_bytes": 3714567371,
+      "before_GiB": 3.459,
+      "after_GiB": 3.373,
+      "saved_bytes": 93121914
+    }
+  ],
+  "saved_GiB": 1.981,
+  "regression_tests": 23,
+  "typecheck_projects": 4,
+  "baseline_frames": 8,
+  "live_render_verified": [
+    {
+      "episode": "ep02-zidong",
+      "frame": 510,
+      "code": 0,
+      "identical_to_validated_copy": true,
+      "max_delta": 0
+    },
+    {
+      "episode": "ep02-zidong",
+      "frame": 1200,
+      "code": 0,
+      "identical_to_validated_copy": true,
+      "max_delta": 0
+    },
+    {
+      "episode": "ep01-intro",
+      "frame": 220,
+      "code": 0,
+      "identical_to_validated_copy": true,
+      "max_delta": 0
+    }
+  ],
+  "post_cleanup_checks": [
+    {
+      "check": "old_path",
+      "code": 0,
+      "result": "C:\\Users\\shipi\\vswp\\ReelEstate\\projects\\listing\\ep02-zidong\\work\\remotion\n",
+      "error": ""
+    },
+    {
+      "check": "listing",
+      "code": 0,
+      "result": "{\n  \"pass\": true,\n  \"draft\": true,\n  \"errors\": [],\n  \"warnings\": []\n}\n",
+      "error": ""
+    },
+    {
+      "check": "knowledge",
+      "code": 0,
+      "result": "{\n  \"pass\": true,\n  \"errors\": []\n}\n",
+      "error": ""
+    }
+  ],
+  "protected_files_verified": 183,
+  "agents_md_unchanged": true,
+  "next_release_number": 3,
+  "rehearsal_removed": true,
+  "historical_test_preflight": {
+    "pass": false,
+    "draft": true,
+    "errors": [
+      "script changed since voice/timeline build; rebuild build_vo and HeyGen plan",
+      "invalid HeyGen plan/hook alpha: FileNotFoundError"
+    ],
+    "warnings": []
+  },
+  "source_backups": "tmp/optimization-20261024/backups",
+  "rollback": "python tmp/optimization-20261024/rollback.py --apply"
+}

@@ -16,6 +16,12 @@
     python flova_invite.py plan --budget 200 --profile prod
     python flova_invite.py ensure --budget 200 --profile prod
     python flova_invite.py candidates
+
+注册浏览器默认走 Virtual Browser（VB，``FLOVA_BROWSER_BACKEND=vb``）：内核直拉 +
+``--worker-id`` + worker 目录 ``virtual.dat`` 指纹，启动前按目标国家重写指纹（每次
+随机、自洽）并以无痕 + 对应代理/语言启动，没有 AdsPower 免费版「每日打开次数」限额。
+AdsPower 本地 API 保留为回退（``FLOVA_BROWSER_BACKEND=adspower``）。两种后端都返回
+统一的 :class:`Worker`，Playwright 经 CDP 端口驱动同一套注册流程。
 """
 from __future__ import annotations
 
@@ -28,7 +34,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import requests
 
@@ -42,9 +48,11 @@ LOCK_PATH = HOME / ".flova" / "invite.lock"
 REPO_POLICY_PATH = Path(__file__).resolve().parents[2] / "config" / "flova-credits-policy.json"
 FLEET_POLICY_PATH = HOME / ".agents" / "skills" / "flova-fleet" / "references" / "policy.json"
 POLICY_PATH = REPO_POLICY_PATH if REPO_POLICY_PATH.exists() else FLEET_POLICY_PATH
-VB_LOCAL = Path(os.environ.get("LOCALAPPDATA", "")) / "VirtualBrowser"
-VB_KERNEL_ROOT = Path(r"C:\Program Files\VirtualBrowser\VirtualBrowser")
-CDP_BASE = 18850
+# ---- AdsPower 本地 API（复用已有免费版配置，不创建/不删除配置）----
+ADS_DEFAULT_BASE = "http://127.0.0.1:50325"
+ADS_DEFAULT_EXE = r"C:\Program Files\AdsPower Global\AdsPower Global.exe"
+ADS_DEFAULT_PROFILE_IDS = ("k1i4dj3c", "k1hhj2u")
+ADS_PAID_MSG = "This feature is only available in paid subscriptions."
 MCP_DIR = HOME / ".flova-mcp"
 WEB_PROFILES_DIR = MCP_DIR / "browser-profiles"
 
@@ -248,6 +256,8 @@ def pick_mailboxes(n: int) -> list[dict[str, str]]:
 
     先收集全部合格邮箱，按 mailbox_order_key 排序（无导入时间的最早一批先消费，
     再按 imported_at 先导入先注册），再取前 n 个，不按接口返回顺序直接取。
+    邮箱池 flova.registered 标记从不回写，必须额外用 signals.flova_verification_seen
+    排除已收过验证码的旧邮箱。
     """
     r = requests.get(
         f"{MAILBOX_API}/v1/mailboxes",
@@ -260,10 +270,14 @@ def pick_mailboxes(n: int) -> list[dict[str, str]]:
     for m in r.json().get("mailboxes", []):
         addr = (m.get("address") or "").strip()
         key = m.get("key")
-        flova = (m.get("registration") or {}).get("flova") or {}
+        reg = m.get("registration") or {}
+        flova = reg.get("flova") or {}
+        signals = reg.get("signals") or {}
         if not addr or not key:
             continue
         if flova.get("registered") is True:
+            continue
+        if signals.get("flova_verification_seen"):   # 已收过 Flova 验证码 = 已注册/被封旧号
             continue
         if addr.lower() in used:
             continue
@@ -278,35 +292,254 @@ def pick_mailboxes(n: int) -> list[dict[str, str]]:
     return picked
 
 
-def find_vb_kernel() -> Path:
-    env = os.environ.get("FLOVA_VB_KERNEL")
+# ----------------------------- 浏览器后端抽象（VB 默认 / AdsPower 回退）------
+
+class Worker(NamedTuple):
+    """统一浏览器 worker。
+
+    id：后端内的唯一标识（VB 是 int worker id；AdsPower 是 profile id 字符串）。
+    name 仅展示用。launch() 返回 CDP 端口，stop() 幂等关闭。
+    """
+    id: Any
+    name: str
+
+    @property
+    def profile_id(self) -> Any:
+        # 兼容旧调用点 worker.profile_id；VB 即 int worker id，AdsPower 即 profile id。
+        return self.id
+
+
+# 旧名保留为别名，供 invite_manual 等的类型注解与外部引用向后兼容。
+AdsPowerSession = Worker
+
+
+def browser_backend() -> str:
+    """``FLOVA_BROWSER_BACKEND=vb|adspower``，默认 vb。"""
+    b = os.environ.get("FLOVA_BROWSER_BACKEND", "vb").strip().lower()
+    return "adspower" if b == "adspower" else "vb"
+
+
+def next_workers(n: int) -> list[Worker]:
+    """返回至多 n 个互不相同、可并行的 worker（不创建/删除任何浏览器资源）。
+
+    n 大于池大小时只返回池大小个 worker，由 ``_run_parallel`` 分波复用：同一
+    worker id 绝不并发（VB 同一 user-data-dir 有 Chromium 锁）。
+    """
+    backend = browser_backend()
+    if backend == "adspower":
+        ensure_ads_api()
+        pool = ads_profile_pool()
+        k = max(0, min(int(n), len(pool)))
+        return [Worker(id=pid, name=pid) for pid in pool[:k]]
+    import vb_backend as vbb
+    pool = vbb.worker_pool()
+    k = max(0, min(int(n), len(pool)))
+    return [Worker(id=w.id, name=w.name) for w in pool[:k]]
+
+
+def launch_worker(worker_id: Any) -> int:
+    """启动一个 worker，返回 CDP debug 端口（int）。
+
+    默认（``FLOVA_VB_WINDOW=minimized``）VB 窗口启动后立即最小化到任务栏：
+    不弹窗、不抢焦点，注册全程后台跑；只有出现需要人工的滑块验证码时才由
+    ``invite_manual.settle_captcha`` 把窗口恢复到前台。``FLOVA_VB_WINDOW=normal``
+    恢复旧的可见窗口行为。
+    """
+    if browser_backend() == "adspower":
+        return launch_ads(str(worker_id))
+    import vb_backend as vbb
+    port = vbb.launch_worker(int(worker_id), country_code=vbb.country(),
+                             incognito=True, rotate=True)
+    if vbb.window_mode() == "minimized":
+        vbb.set_window_state(port, "minimized")
+    return port
+
+
+def stop_worker(worker_id: Any) -> None:
+    """幂等关闭一个 worker（只关浏览器/进程树，绝不删除配置或 worker 目录）。"""
+    if browser_backend() == "adspower":
+        stop_ads(str(worker_id))
+        return
+    import vb_backend as vbb
+    vbb.stop_worker(int(worker_id))
+
+
+def fingerprint_rotated(worker_id: Any) -> bool:
+    """本次启动是否换了指纹。
+
+    VB：启动前总会重写 virtual.dat（每次随机）→ True。AdsPower：看本次
+    new-fingerprint 是否被付费墙挡下（挡下为 False，沿用旧指纹继续）。
+    """
+    if browser_backend() == "adspower":
+        return bool(_ADS_FINGERPRINT.get(str(worker_id), False))
+    return True
+
+
+# 记录每个 AdsPower profile 本次启动 new-fingerprint 是否成功（同 profile 不会并发，见分波）。
+_ADS_FINGERPRINT: dict[str, bool] = {}
+
+
+def ads_api_base() -> str:
+    base = os.environ.get("ADSPOWER_API_BASE", "").strip()
+    if base:
+        return base.rstrip("/")
+    port = os.environ.get("ADSPOWER_API_PORT", "").strip()
+    if port:
+        return f"http://127.0.0.1:{port}"
+    return ADS_DEFAULT_BASE
+
+
+def ads_profile_pool() -> list[str]:
+    """可复用的 AdsPower profile id 池（免费版固定两个，可用环境变量覆盖）。"""
+    raw = os.environ.get("ADSPOWER_PROFILE_IDS", "").strip()
+    if raw:
+        ids = [p.strip() for p in raw.split(",") if p.strip()]
+        if ids:
+            return ids
+    return list(ADS_DEFAULT_PROFILE_IDS)
+
+
+def _ads_headers() -> dict[str, str]:
+    # 仅当显式提供 ADSPOWER_API_KEY 时带 Bearer；未配置就不发任何认证头。
+    key = os.environ.get("ADSPOWER_API_KEY", "").strip()
+    return {"Authorization": f"Bearer {key}"} if key else {}
+
+
+def _ads_exe_path() -> Path:
+    env = os.environ.get("ADSPOWER_BROWSER_EXE", "").strip()
     if env and Path(env).is_file():
         return Path(env)
-    if not VB_KERNEL_ROOT.is_dir():
-        raise RuntimeError(f"VirtualBrowser kernel root missing: {VB_KERNEL_ROOT}")
-    versions = sorted(
-        [p for p in VB_KERNEL_ROOT.iterdir() if p.is_dir() and (p / "VirtualBrowser.exe").is_file()],
-        key=lambda p: p.name,
+    return Path(ADS_DEFAULT_EXE)
+
+
+def ensure_ads_api() -> None:
+    """确保 AdsPower 本地 API 在监听（``GET /status`` 返回 code 0）。
+
+    就绪探测不依赖 api-key（API verification 关闭时即可用）。探测失败时同进程启动
+    本机 GUI（不带任何参数、不传 api-key），最多轮询 45 秒。绝不打印密钥。
+    """
+    base = ads_api_base()
+
+    def _ready() -> bool:
+        try:
+            r = requests.get(f"{base}/status", timeout=2)
+            if r.status_code != 200:
+                return False
+            return bool((r.json() or {}).get("code") == 0)
+        except Exception:
+            return False
+
+    if _ready():
+        return
+
+    exe = _ads_exe_path()
+    if not exe.is_file():
+        raise RuntimeError(f"AdsPower browser exe not found: {exe}")
+    flags = 0
+    if os.name == "nt":
+        flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+    subprocess.Popen(
+        [str(exe)],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        close_fds=True,
+        creationflags=flags,
     )
-    if not versions:
-        raise RuntimeError("no VirtualBrowser.exe under kernel root")
-    return versions[-1] / "VirtualBrowser.exe"
+    deadline = time.time() + 45
+    while time.time() < deadline:
+        if _ready():
+            return
+        time.sleep(0.5)
+    raise RuntimeError(f"AdsPower Local API not ready at {base} after 45s")
 
 
-def next_workers(n: int) -> list[tuple[str, int, Path]]:
-    """一次性预分配 n 个 VB worker（独立 user-data-dir + CDP 端口）。"""
-    workers = VB_LOCAL / "Workers"
-    workers.mkdir(parents=True, exist_ok=True)
-    existing = {p.name for p in workers.iterdir() if p.is_dir()}
-    out: list[tuple[str, int, Path]] = []
-    k = 10
-    while len(out) < n:
-        sid = str(k)
-        if sid not in existing:
-            out.append((sid, CDP_BASE + (k % 100), workers / sid))
-            existing.add(sid)
-        k += 1
-    return out
+def _refresh_fingerprint_once(base: str, headers: dict[str, str],
+                              profile_id: str) -> bool:
+    """启动前尝试一次 new-fingerprint。
+
+    code 0 → True；免费版返回“仅付费套餐可用”→ False（不拒绝启动）；其余非零
+    code/网络错误抛错。``profile_id`` 必须是数组（上限 10）。绝不记录指纹值。
+    """
+    r = requests.post(
+        f"{base}/api/v2/browser-profile/new-fingerprint",
+        headers=headers,
+        json={"profile_id": [profile_id]},
+        timeout=30,
+    )
+    try:
+        body = r.json()
+    except Exception as e:
+        raise RuntimeError(
+            f"AdsPower new-fingerprint bad response http={r.status_code}: "
+            f"{r.text[:200]}"
+        ) from e
+    code = body.get("code")
+    msg = str(body.get("msg") or "")
+    if code == 0:
+        return True
+    if ADS_PAID_MSG in msg:
+        return False
+    raise RuntimeError(
+        f"AdsPower new-fingerprint failed http={r.status_code} code={code}: {msg[:200]}"
+    )
+
+
+def launch_ads(profile_id: str) -> int:
+    """启动一个已有 AdsPower profile，返回 CDP debug 端口（int）。
+
+    先尝试一次 new-fingerprint（免费版拒绝时记 fingerprint_refreshed=False 继续），
+    再 ``GET /api/v1/browser/start?ip_tab=0&open_tabs=1``。非付费指纹提示之外的非零
+    code 抛 RuntimeError（带 http/code/截断 msg，不含任何密钥）。
+    """
+    base = ads_api_base()
+    headers = _ads_headers()
+    refreshed = False
+    try:
+        refreshed = _refresh_fingerprint_once(base, headers, profile_id)
+    finally:
+        _ADS_FINGERPRINT[profile_id] = refreshed
+
+    r = requests.get(
+        f"{base}/api/v1/browser/start",
+        params={"user_id": profile_id, "ip_tab": 0, "open_tabs": 1},
+        headers=headers,
+        timeout=60,
+    )
+    try:
+        body = r.json()
+    except Exception as e:
+        raise RuntimeError(
+            f"AdsPower start bad response http={r.status_code}: {r.text[:200]}"
+        ) from e
+    code = body.get("code")
+    if code != 0:
+        msg = str(body.get("msg") or "")[:240]
+        raise RuntimeError(
+            f"AdsPower start failed http={r.status_code} code={code}: {msg}"
+        )
+    data = body.get("data") or {}
+    port = data.get("debug_port")
+    if port is None or str(port).strip() == "":
+        raise RuntimeError("AdsPower start response missing data.debug_port")
+    return int(str(port))
+
+
+def stop_ads(profile_id: str) -> None:
+    """只关闭浏览器：``GET /api/v1/browser/stop?user_id=<id>``。
+
+    “User_id is not open”（已关闭）与网络错误都视为成功。绝不删除 profile。
+    """
+    base = ads_api_base()
+    try:
+        requests.get(
+            f"{base}/api/v1/browser/stop",
+            params={"user_id": profile_id},
+            headers=_ads_headers(),
+            timeout=30,
+        )
+    except requests.RequestException:
+        return
 
 
 def wait_cdp(port: int, timeout_s: float = 45) -> None:
@@ -548,6 +781,119 @@ def _is_flova_domain(domain: str | None) -> bool:
     return d == "flova.ai" or d.endswith(".flova.ai")
 
 
+def _normalize_storage_cookie(c: dict) -> dict:
+    """把任意来源 cookie 归一化成 storage_state/add_cookies 接受的形状。"""
+    c = dict(c)
+    c.setdefault("path", "/")
+    try:
+        if float(c.get("expires") or 0) <= 0:
+            c["expires"] = -1.0
+        else:
+            c["expires"] = float(c["expires"])
+    except (TypeError, ValueError):
+        c["expires"] = -1.0
+    c.setdefault("httpOnly", False)
+    c.setdefault("secure", True)
+    if c.get("sameSite") not in {"Strict", "Lax", "None"}:
+        # CDP 可能给 "Unspecified"，storage_state 只接受这三个值。
+        c["sameSite"] = "Lax"
+    return c
+
+
+def _cdp_flova_cookies(context) -> list[dict]:
+    """经 CDP Network.getAllCookies 读全部 cookie，只留 flova 域并归一化。
+
+    VirtualBrowser 内核经 CDP 接入时，Playwright 的 context.cookies() 实测会
+    返回空罐（Storage.getCookies 同样为空），只有原始 CDP Network.getAllCookies
+    能拿到页面真实 cookie。优先用本函数，context.cookies() 作为回退。
+    """
+    page = None
+    try:
+        for pg in context.pages:
+            try:
+                if "flova.ai" in (pg.url or ""):
+                    page = pg
+                    break
+            except Exception:  # noqa: BLE001
+                continue
+        if page is None and context.pages:
+            page = context.pages[0]
+        if page is None:
+            return []
+        sess = context.new_cdp_session(page)
+        raw = sess.send("Network.getAllCookies").get("cookies", [])
+    except Exception:  # noqa: BLE001
+        return []
+    out = []
+    for c in raw:
+        if not _is_flova_domain(c.get("domain")):
+            continue
+        out.append(_normalize_storage_cookie(c))
+    return out
+
+
+def context_flova_cookies(context) -> list[dict]:
+    """读 context 里的 flova cookie：先 Playwright，空则回退原始 CDP。"""
+    try:
+        pw = [_normalize_storage_cookie(dict(c))
+              for c in context.cookies() if _is_flova_domain(c.get("domain"))]
+    except Exception:  # noqa: BLE001
+        pw = []
+    if pw:
+        return pw
+    return _cdp_flova_cookies(context)
+
+
+def page_logged_in(page) -> dict[str, Any]:
+    """在页面里发 get_user_info（与网站自身请求完全同环境）。
+
+    无论会话载体是 cookie 还是 localStorage 里的 Bearer 令牌，页面内 fetch 都会
+    自动带上，避免「迁移时只搬 cookie、漏了 localStorage 令牌」导致的假未登录。
+    返回 {http_ok, code, email, user_id}；失败返回 {}。
+    """
+    try:
+        res = page.evaluate(
+            """async () => {
+                try {
+                  const r = await fetch(
+                    'https://service.flova.ai/api/v2/user/get_user_info',
+                    {method:'POST',
+                     headers:{'content-type':'application/json'},
+                     body:'{}', credentials:'include'});
+                  const j = await r.json().catch(()=>({}));
+                  const d = j && j.data ? j.data : {};
+                  return {http_ok:r.ok, code:j.code,
+                          email:d.email || null, user_id:d.user_id || null};
+                } catch (e) { return {error:String(e).slice(0,160)}; }
+              }""")
+    except Exception:  # noqa: BLE001
+        return {}
+    if not isinstance(res, dict) or res.get("error"):
+        return {}
+    return res
+
+
+def page_auth_storage(page) -> dict[str, Any] | None:
+    """读 localStorage 的 videoagent-auth-storage（不返回令牌明文，只给形态）。
+
+    登录成功后 state.user 非空。供判断会话是否同时依赖 localStorage。
+    """
+    try:
+        return page.evaluate(
+            """() => {
+                const raw = localStorage.getItem('videoagent-auth-storage');
+                if (!raw) return null;
+                try {
+                  const j = JSON.parse(raw);
+                  const u = j && j.state ? j.state.user : null;
+                  return {present:true, hasUser:!!u,
+                          userKeys:u?Object.keys(u):[]};
+                } catch (e) { return {present:true, parseError:String(e).slice(0,80)}; }
+              }""")
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _system_chrome() -> str:
     """与 web-session.js candidateBrowsers 同顺序的系统 Chrome/Edge。"""
     cands = [
@@ -579,46 +925,113 @@ def _web_get_user_info(context) -> dict[str, Any]:
             "email": data.get("email"), "user_id": data.get("user_id")}
 
 
+def _source_flova_page(source_context):
+    """在来源 context 里找一个 flova 页面；没有就新开一个。"""
+    try:
+        for pg in source_context.pages:
+            try:
+                if "flova.ai" in (pg.url or ""):
+                    return pg
+            except Exception:  # noqa: BLE001
+                continue
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        pg = source_context.new_page()
+        pg.goto("https://www.flova.ai/en/", wait_until="domcontentloaded", timeout=45000)
+        return pg
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _dump_local_storage(page) -> dict[str, str]:
+    try:
+        return page.evaluate(
+            """() => {
+                const o = {};
+                for (let i = 0; i < localStorage.length; i++) {
+                  const k = localStorage.key(i);
+                  o[k] = localStorage.getItem(k);
+                }
+                return o;
+              }""") or {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+# 只迁移可能承载会话的 localStorage 前缀/键，避免把纯统计标识也搬过去。
+_LS_AUTH_HINTS = ("auth", "token", "session", "credential", "user", "login")
+
+
 def adopt_web_session(profile_name: str, source_context, *,
                       expected_email: str | None = None,
-                      playwright=None) -> dict[str, Any]:
-    """把一个**已登录同账号**的 Playwright context 的 flova cookies 采纳到
+                      playwright=None, proxy_server: str | None = None) -> dict[str, Any]:
+    """把一个**已登录同账号**的浏览器 context 的会话采纳到
     ``~/.flova-mcp/browser-profiles/<profile_name>``。
 
-    signup 与 repair 共用此函数。流程：
-      1. ``source_context.cookies()`` 已由 Playwright/CDP 解密；只取 flova 域。
-      2. 系统 Chrome/Edge 持久 context（与 web-session.js 同布局）addCookies。
-         绝不拷贝 Cookies sqlite——DPAPI 加密键不匹配。
-      3. 必须 get_user_info code==0 且网页邮箱 == expected_email。
-         失败立刻清空已导入 cookies 并抛错，不留半成品（绝不保留错误会话）。
+    同时迁移两种会话载体（flova 网页可能用其中任意一种）：
+      1. flova 域 cookie：经 Playwright 读，空则回退原始 CDP
+         ``Network.getAllCookies``（VirtualBrowser 内核下 Playwright 罐为空）。
+      2. www.flova.ai 的 localStorage 鉴权条目（如 ``videoagent-auth-storage``，
+         登录令牌可能放这里并以 Bearer 发送）；通过 init script 在目标页面脚本
+         运行前注入，首次导航后由 Chrome 持久化进 profile。
+    验证在目标里打开 flova 页面、用**页面内 fetch** 调 get_user_info（cookie 与
+    localStorage 都会带上），必须 code==0 且邮箱 == expected_email。失败立刻清空
+    cookie + localStorage 并抛错，不留半成品。
+    绝不拷贝 Cookies sqlite——DPAPI 加密键不匹配。
     """
-    cookies = [dict(c) for c in source_context.cookies()
-               if _is_flova_domain(c.get("domain"))]
+    cookies = context_flova_cookies(source_context)
     if not cookies:
         raise RuntimeError("no flova cookies in source context")
-    # 会话型 cookie expires<=0：add_cookies 不接受负 expires，去掉让其按会话处理。
-    for c in cookies:
-        if float(c.get("expires") or 0) <= 0:
-            c.pop("expires", None)
+
+    src_page = _source_flova_page(source_context)
+    ls_all = _dump_local_storage(src_page) if src_page is not None else {}
+    ls_auth = {k: v for k, v in ls_all.items()
+               if any(h in str(k).lower() for h in _LS_AUTH_HINTS)}
 
     own_pw = playwright is None
     if own_pw:
         from playwright.sync_api import sync_playwright
         playwright = sync_playwright().start()
     target = None
+    verify_page = None
     try:
         target_dir = WEB_PROFILES_DIR / profile_name
         target_dir.mkdir(parents=True, exist_ok=True)
-        target = playwright.chromium.launch_persistent_context(
-            str(target_dir),
+        launch_kwargs: dict[str, Any] = dict(
             executable_path=_system_chrome(),
             headless=True,
             args=["--no-default-browser-check", "--no-first-run",
                   "--disable-blink-features=AutomationControlled"],
             viewport={"width": 1280, "height": 860},
         )
+        # 采纳验证走与登录同一个出口代理：登录态若对 IP 敏感，换国内直连 IP 验证
+        # 可能立刻把刚建的会话冲掉。proxy_server 形如 http://127.0.0.1:7897。
+        if proxy_server:
+            launch_kwargs["proxy"] = {"server": proxy_server}
+        target = playwright.chromium.launch_persistent_context(
+            str(target_dir), **launch_kwargs)
         target.add_cookies(cookies)
-        info = _web_get_user_info(target)
+        if ls_auth:
+            literal = json.dumps(ls_auth, ensure_ascii=False).replace("</", "<\\/")
+            target.add_init_script(
+                "(()=>{try{const o=%s;"
+                "if(location.hostname.endsWith('flova.ai')){"
+                "for(const k in o){localStorage.setItem(k,o[k]);}}}catch(e){}})();"
+                % literal
+            )
+
+        verify_page = target.new_page()
+        verify_page.goto("https://www.flova.ai/en/",
+                         wait_until="domcontentloaded", timeout=45000)
+        # 前端水合/令牌恢复可能是异步的，轮询几轮。
+        info: dict[str, Any] = {}
+        for _ in range(6):
+            info = page_logged_in(verify_page)
+            if info.get("code") == 0 and info.get("email"):
+                break
+            time.sleep(1.5)
+
         email = info.get("email")
         email_match = (
             not expected_email
@@ -626,8 +1039,15 @@ def adopt_web_session(profile_name: str, source_context, *,
                 and str(email).lower() == str(expected_email).lower())
         )
         if info.get("code") != 0 or not email_match:
-            # 不保留导入的 cookies：该 profile 是专用空 jar，整罐清空。
-            target.clear_cookies()
+            # 不保留任何导入的会话：cookie 整罐清空 + localStorage 清空。
+            try:
+                target.clear_cookies()
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                verify_page.evaluate("()=>localStorage.clear()")
+            except Exception:  # noqa: BLE001
+                pass
             if info.get("code") != 0:
                 err = RuntimeError("FLOVA_WEB_UNAUTHENTICATED")
                 err.code = "FLOVA_WEB_UNAUTHENTICATED"
@@ -635,9 +1055,35 @@ def adopt_web_session(profile_name: str, source_context, *,
                 err = RuntimeError("FLOVA_WEB_EMAIL_MISMATCH")
                 err.code = "FLOVA_WEB_EMAIL_MISMATCH"
             raise err
+
+        # 确保 videoagent-auth-storage 拥有合法的 user，防止前端 UI 鉴权未水合时重定向跳出工作台
+        try:
+            auth_val = json.dumps({"state": {"user": {
+                "email": email, "user_id": info.get("user_id")
+            }}, "version": 0})
+            verify_page.evaluate(
+                """(val) => {
+                    try {
+                        const raw = localStorage.getItem('videoagent-auth-storage');
+                        const parsed = raw ? JSON.parse(raw) : {};
+                        if (!parsed.state || !parsed.state.user) {
+                            localStorage.setItem('videoagent-auth-storage', val);
+                        }
+                    } catch(e) {}
+                }""",
+                auth_val,
+            )
+        except Exception:
+            pass
         return {"profile": profile_name, "email": email,
-                "user_id": info.get("user_id")}
+                "user_id": info.get("user_id"),
+                "migrated_localstorage": sorted(ls_auth.keys())}
     finally:
+        if verify_page is not None:
+            try:
+                verify_page.close()
+            except Exception:  # noqa: BLE001
+                pass
         if target is not None:
             target.close()
         if own_pw:
@@ -742,38 +1188,29 @@ def _add_cli_profile(name: str, token: str) -> None:
 
 
 def invite_one(*, mother_profile: str, mailbox: dict[str, str],
-               profile_name: str, worker: tuple[str, int, Path]) -> dict[str, Any]:
-    """注册 1 个子号（资源由调用方预分配，可并行）。成功标准：拿到子号 token。"""
-    worker_id, port, worker_dir = worker
-    code = None
-    try:
-        snap0 = invite_snapshot(mother_profile)
-        code = snap0["promotion_code"]
-        if not code:
-            return {"ok": False, "reason": "no_promotion_code",
-                    "child_email": mailbox["address"]}
-    except Exception as e:
-        return {"ok": False, "reason": f"mother_snapshot_failed: {str(e)[:120]}",
-                "child_email": mailbox["address"]}
+               profile_name: str, worker: Worker) -> dict[str, Any]:
+    """注册 1 个子号（资源由调用方预分配，可并行）。成功标准：拿到子号 token。
 
-    kernel = find_vb_kernel()
-    worker_dir.mkdir(parents=True, exist_ok=True)
-    invite_url = f"https://www.flova.ai/?refCode={code}"
-    proc = subprocess.Popen(
-        [
-            str(kernel),
-            f"--user-data-dir={worker_dir}",
-            f"--worker-id={worker_id}",
-            "--no-first-run",
-            "--no-default-browser-check",
-            f"--remote-debugging-port={port}",
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    无论成功失败（含提前返回）都在 finally 里 stop_worker 自己的 worker；VB 只
+    taskkill 进程树，AdsPower 只 stop，绝不删除任何配置或 worker 目录/virtual.dat。
+    """
+    worker_id = worker.id
+    port: int | None = None
     signup_err = None
     child_token = None
     try:
+        try:
+            snap0 = invite_snapshot(mother_profile)
+            code = snap0["promotion_code"]
+            if not code:
+                return {"ok": False, "reason": "no_promotion_code",
+                        "child_email": mailbox["address"]}
+        except Exception as e:
+            return {"ok": False, "reason": f"mother_snapshot_failed: {str(e)[:120]}",
+                    "child_email": mailbox["address"]}
+
+        invite_url = f"https://www.flova.ai/?refCode={code}"
+        port = launch_worker(worker_id)
         wait_cdp(port)
         time.sleep(2)
         try:
@@ -793,38 +1230,57 @@ def invite_one(*, mother_profile: str, mailbox: dict[str, str],
             "child_email": mailbox["address"],
             "child_profile": profile_name if keyed else None,
             "keyed": keyed,
-            "worker_id": worker_id,
+            "backend": browser_backend(),
+            "vb_worker_id": worker_id if browser_backend() == "vb" else None,
+            "ads_profile_id": worker_id if browser_backend() == "adspower" else None,
+            "fingerprint_rotated": fingerprint_rotated(worker_id),
             "cdp_port": port,
         }
     finally:
-        try:
-            proc.terminate()
-            proc.wait(timeout=8)
-        except Exception:
-            try:
-                proc.kill()
-            except Exception:
-                pass
+        stop_worker(worker_id)
 
 
-def _run_parallel(mother_profile: str, slots: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """n 个注册并行执行，不等待；资源已在锁内预分配，互不冲突。"""
-    n = len(slots)
-    if n == 1:
-        return [invite_one(mother_profile=mother_profile, **slots[0])]
-    with ThreadPoolExecutor(max_workers=n) as ex:
-        futs = [ex.submit(invite_one, mother_profile=mother_profile, **s)
-                for s in slots]
-        return [f.result() for f in futs]
+def _run_parallel(mother_profile: str, slots: list[dict[str, Any]],
+                  entered: set[Any] | None = None) -> list[dict[str, Any]]:
+    """分波注册：每波同时运行的 slot 各自占用池内互不相同的 worker id。
+
+    波大小 = slots 里出现的不同 worker id 数（即 ``min(n, 池大小)``）。一波所有注册
+    都结束（``invite_one`` 在 finally 里已对自己的 worker 调过 ``stop_worker`` 并返回）
+    后，下一波才复用同 worker，因此同一个 worker id（同一 user-data-dir）绝不会在两个
+    仍在运行的会话里。VB 没有 AdsPower 的池大小/每日限额，唯一约束是同 id 不并发。
+
+    ``entered`` 若给出，会记录真正进入 invite_one 的 worker id，供调用方只清理
+    那些因异常从未进入 invite_one（因而没被它自己 stop_worker）的孤儿浏览器。
+    """
+    def _run(slot: dict[str, Any]) -> dict[str, Any]:
+        if entered is not None:
+            entered.add(slot["worker"].id)
+        return invite_one(mother_profile=mother_profile, **slot)
+
+    wave_size = len({s["worker"].id for s in slots}) or 1
+    results: list[dict[str, Any]] = []
+    for start in range(0, len(slots), wave_size):
+        wave = slots[start:start + wave_size]
+        if len(wave) == 1:
+            results.append(_run(wave[0]))
+            continue
+        with ThreadPoolExecutor(max_workers=len(wave)) as ex:
+            futs = [ex.submit(_run, s) for s in wave]
+            results.extend(f.result() for f in futs)
+    return results
 
 
 def _allocate_slots(n: int) -> list[dict[str, Any]]:
     mailboxes = pick_mailboxes(n)
     profiles = next_child_profiles(n)
-    workers = next_workers(n)
+    # next_workers 只做后端就绪检查并返回池内已有 worker（≤ 池大小），绝不创建。
+    pool = next_workers(n)
+    if not pool:
+        raise RuntimeError(f"no {browser_backend()} worker available in pool")
+    # 池比 n 小时按槽位轮转复用；真正的并发互斥由 _run_parallel 分波保证。
     return [
-        {"mailbox": mb, "profile_name": prof, "worker": wk}
-        for mb, prof, wk in zip(mailboxes, profiles, workers)
+        {"mailbox": mb, "profile_name": prof, "worker": pool[i % len(pool)]}
+        for i, (mb, prof) in enumerate(zip(mailboxes, profiles))
     ]
 
 
@@ -836,12 +1292,13 @@ def _record_children(results: list[dict[str, Any]], inviter_email: str | None) -
             continue
         if r["child_email"].lower() in known:
             continue
+        state = r.get("reason") if r.get("reason") in ("keyed", "web_session") else "keyed"
         reg.setdefault("accounts", []).append({
             "email": r["child_email"],
             "role": "child",
-            "state": "keyed",
+            "state": state,
             "invited_by": inviter_email,
-            "api_key_ref": f"flova-profile:{r['child_profile']}",
+            "api_key_ref": f"flova-profile:{r['child_profile']}" if state == "keyed" else None,
             # 网页会话已采纳到 MCP 持久 profile 目录（与 mother 同款记录）。
             "web_profile_ref": f"~/.flova-mcp/browser-profiles/{r['child_profile']}",
             "last_verified": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -916,9 +1373,22 @@ def ensure_credits(*, budget: float, profile: str = "prod") -> dict[str, Any]:
             req = invite_requirement(budget=budget, mother_profile=billing)
             n = int(req["n"])
 
-        # 资源一次性预分配，然后并行注册、不等待。
+        # 资源一次性预分配，然后分波注册（每波并发不超过池大小）。
         slots = _allocate_slots(max(1, n))
-        results = _run_parallel(billing, slots)
+        entered: set[Any] = set()
+        try:
+            results = _run_parallel(billing, slots, entered=entered)
+        finally:
+            # invite_one 总会自己 stop；这里只关闭因异常从未进入 invite_one 的孤儿
+            # 浏览器（stop_worker 幂等：VB taskkill 进程树、AdsPower stop），绝不删除
+            # 任何配置 / worker 目录 / virtual.dat，也不让清理拖垮 ensure。
+            for s in slots:
+                wid = s["worker"].id
+                if wid not in entered:
+                    try:
+                        stop_worker(wid)
+                    except Exception:
+                        pass
         inviter_email = next(
             (a.get("email") for a in load_registry().get("accounts", [])
              if a.get("role") == "mother"),
@@ -967,47 +1437,9 @@ def ensure_credits(*, budget: float, profile: str = "prod") -> dict[str, Any]:
 
 # ----------------------------- 存量子号会话修复 ----------------------------
 
-def _vb_userdata_for_ref(ref: str) -> Path | None:
-    """把 web_profile_ref 解析成 VirtualBrowser user-data-dir。
-
-    MCP 目录引用（已采纳过）返回 None。virtualbrowser-dir 按精确目录取，
-    不猜名；账号归属一律以会话邮箱比对为准。
-    """
+def _is_legacy_virtualbrowser_ref(ref: str | None) -> bool:
     s = str(ref or "")
-    if s.startswith("virtualbrowser-worker:"):
-        wid = s.split(":", 1)[1].split("(", 1)[0]
-        return VB_LOCAL / "Workers" / wid
-    if s.startswith("virtualbrowser-dir:"):
-        name = s.split(":", 1)[1].split("(", 1)[0]
-        return VB_LOCAL / name
-    return None
-
-
-def _free_tcp_port() -> int:
-    import socket
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return int(s.getsockname()[1])
-
-
-def _launch_vb(userdata: Path, port: int) -> tuple[subprocess.Popen, str | None]:
-    kernel = find_vb_kernel()
-    worker_id: str | None = None
-    if userdata.parent.name == "Workers":
-        worker_id = userdata.name
-    args = [
-        str(kernel),
-        f"--user-data-dir={userdata}",
-        "--no-first-run",
-        "--no-default-browser-check",
-        f"--remote-debugging-port={port}",
-    ]
-    if worker_id:
-        args.append(f"--worker-id={worker_id}")
-    proc = subprocess.Popen(
-        args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-    return proc, worker_id
+    return s.startswith("virtualbrowser-worker:") or s.startswith("virtualbrowser-dir:")
 
 
 def _signin_existing_in_browser(cdp: str, email: str, mailbox_key: str,
@@ -1040,11 +1472,17 @@ def _signin_existing_in_browser(cdp: str, email: str, mailbox_key: str,
 
 def repair_web_sessions(*, only: str | None = None,
                         allow_otp_signin: bool = True) -> dict[str, Any]:
-    """逐个修复 keyed 子号：开 web_profile_ref 指向的 VB user-data-dir，
-    有同账号 Flova 会话就采纳；会话不可恢复且有 mailbox_ref 时允许一次
-    邮箱 OTP 登录（非注册）；两者都没有则 skipped。
+    """逐个处理 keyed 子号的网页会话引用（不邀新、不删任何账号/profile）。
 
-    串行：Chrome user-data-dir 不能同时开两次。不邀新、不删任何账号/profile。
+    - web_profile_ref 已采纳到 ``~/.flova-mcp/browser-profiles/...``：保持原样，
+      不再打开任何浏览器。
+    - 仍指向旧虚拟浏览器（``virtualbrowser-worker:`` / ``virtualbrowser-dir:``）：
+      有 ``mailbox_ref`` 且允许 OTP 时，复用后端 worker 池里的一个 worker（默认 VB，
+      无痕 + 按国家轮换指纹）做一次邮箱 OTP 登录（非注册）后采纳；没有邮箱或不允许
+      OTP 则 skipped（reason=legacy_virtualbrowser_profile）。绝不启动旧虚拟浏览器，
+      也不创建、不删除任何 worker / profile / worker 目录。
+
+    串行：一次只开一个 worker。
     """
     from flova_pricing import _cli_account
 
@@ -1072,93 +1510,51 @@ def repair_web_sessions(*, only: str | None = None,
             continue
         expected_email = expected_email or cli_email
 
-        userdata = _vb_userdata_for_ref(a.get("web_profile_ref"))
-        recovered = False
-        mismatch = False
-        if userdata is not None and userdata.is_dir():
-            port = _free_tcp_port()
-            proc, _wid = _launch_vb(userdata, port)
-            try:
-                wait_cdp(port)
-                time.sleep(2)
-                from playwright.sync_api import sync_playwright
-                with sync_playwright() as p:
-                    browser = p.chromium.connect_over_cdp(
-                        f"http://127.0.0.1:{port}")
-                    ctx = browser.contexts[0]
-                    info = _web_get_user_info(ctx)
-                    if info.get("code") == 0:
-                        web_email = str(info.get("email") or "").lower()
-                        if web_email == expected_email:
-                            adopt_web_session(prof, ctx,
-                                              expected_email=expected_email,
-                                              playwright=p)
-                            recovered = True
-                        else:
-                            mismatch = True
-                    browser.close()
-            finally:
-                try:
-                    proc.terminate()
-                    proc.wait(timeout=8)
-                except Exception:
-                    try:
-                        proc.kill()
-                    except Exception:
-                        pass
-                time.sleep(2)  # 等 user-data-dir 锁释放
+        ref = str(a.get("web_profile_ref") or "")
 
-        if recovered:
+        # 已采纳到 MCP 持久 profile 目录：保持原样，不开浏览器。
+        if ref.startswith("~/.flova-mcp/browser-profiles/"):
+            results.append({"profile": prof, "status": "skipped",
+                            "reason": "web_profile_adopted"})
+            continue
+
+        # 仅处理旧虚拟浏览器引用；其他引用无源会话，直接跳过。
+        if not _is_legacy_virtualbrowser_ref(ref):
+            results.append({"profile": prof, "status": "skipped",
+                            "reason": "no_source_session"})
+            continue
+
+        mailbox_ref = a.get("mailbox_ref")
+        if not (allow_otp_signin and mailbox_ref):
+            results.append({"profile": prof, "status": "skipped",
+                            "reason": "legacy_virtualbrowser_profile"})
+            continue
+
+        # 复用后端池里的一个 worker（默认 VB 无痕轮换；不创建、不删除）。
+        session = next_workers(1)[0]
+        wid = session.id
+        try:
+            port = launch_worker(wid)
+            wait_cdp(port)
+            time.sleep(2)
+            _signin_existing_in_browser(
+                f"http://127.0.0.1:{port}", expected_email, mailbox_ref, prof)
             a["web_profile_ref"] = f"~/.flova-mcp/browser-profiles/{prof}"
             touched = True
-            results.append({"profile": prof, "status": "adopted",
-                            "source": str(userdata) if userdata else None})
-            continue
-
-        if mismatch:
+            result = {"profile": prof, "status": "adopted",
+                      "source": "otp_signin", "backend": browser_backend(),
+                      "fingerprint_rotated": fingerprint_rotated(wid)}
+            if browser_backend() == "vb":
+                result["vb_worker_id"] = wid
+            else:
+                result["ads_profile_id"] = wid
+            results.append(result)
+        except Exception as e:
             results.append({"profile": prof, "status": "skipped",
-                            "reason": "email_mismatch"})
-            continue
-
-        # 无源会话：有 mailbox_ref 才允许一次 OTP 登录（存量账号，非注册）。
-        mailbox_ref = a.get("mailbox_ref")
-        if allow_otp_signin and mailbox_ref and userdata is not None \
-                and userdata.is_dir():
-            port = _free_tcp_port()
-            proc, _wid = _launch_vb(userdata, port)
-            try:
-                wait_cdp(port)
-                time.sleep(2)
-                try:
-                    _signin_existing_in_browser(
-                        f"http://127.0.0.1:{port}", expected_email,
-                        mailbox_ref, prof)
-                    a["web_profile_ref"] = (
-                        f"~/.flova-mcp/browser-profiles/{prof}")
-                    touched = True
-                    results.append({"profile": prof, "status": "adopted",
-                                    "source": "otp_signin"})
-                    continue
-                except Exception as e:
-                    signin_err = str(e)[:120]
-            finally:
-                try:
-                    proc.terminate()
-                    proc.wait(timeout=8)
-                except Exception:
-                    try:
-                        proc.kill()
-                    except Exception:
-                        pass
-                time.sleep(2)
-        else:
-            signin_err = None
-
-        results.append({
-            "profile": prof, "status": "skipped",
-            "reason": "no_source_session",
-            **({"detail": signin_err} if signin_err else {}),
-        })
+                            "reason": "legacy_virtualbrowser_profile",
+                            "detail": str(e)[:120]})
+        finally:
+            stop_worker(wid)
 
     if touched:
         reg["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())

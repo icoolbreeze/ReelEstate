@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Fetch real Amap POIs + routes for an episode and write <episode>/pois.json.
 
-Usage:  python pipeline/amap_fetch.py episodes/ep07-xihu/episode.json [--city 杭州]
+Usage:  python pipeline/maphub/amap_fetch.py projects/listing/<ep>/episode.json [--city 成都]
+Raw Amap route responses go to <episode>/sources/amap/route_*.json (never into a folder named raw/).
 Needs the map-tools skill (map.py). Location resolved in this order:
   $MAP_TOOLS_PY, ~/.agents/skills/map-tools/scripts/map.py
 API keys are read by map.py itself from ~/.config/map-tools/keys.json  (never printed, never copied).
@@ -36,7 +37,7 @@ def main():
     plane = Plane.from_cfg(ep["plane"])
     L = ep["listing"]["lnglat"]
     org = f"{L[0]},{L[1]}"
-    rawdir = ep_path.parent / "raw"; rawdir.mkdir(exist_ok=True)
+    rawdir = ep_path.parent / "sources" / "amap"; rawdir.mkdir(parents=True, exist_ok=True)
     cache = {}
     pois = []
     for q in ep["poiQueries"]:

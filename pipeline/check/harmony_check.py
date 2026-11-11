@@ -16,13 +16,16 @@ from __future__ import annotations
 
 import argparse
 import glob
+import hashlib
+import json
+import math
 import os
 import sys
 from dataclasses import dataclass, field
 from typing import List, Tuple
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 # Windows: make stdout/stderr UTF-8 so the box-drawing / CJK / arrow characters survive pipes and cp936 consoles.
 os.environ.setdefault("PYTHONUTF8", "1")
@@ -151,7 +154,82 @@ class ImageReport:
         return [f for f in self.findings if f.severity == "soft" and not f.ok]
 
 
-def analyze_image(path: str, accent_hex: str) -> ImageReport:
+def foreground_mask(path: str, size: Tuple[int, int], target: Tuple[int, int]):
+    """Read renderer-measured foreground bounds, bound to these exact image bytes.
+
+    Only D3's distant-background measurement uses this mask. Palette, contrast,
+    peripheral sharpness and all other gates still inspect the complete image.
+    Missing metadata preserves the legacy measurement; invalid metadata is a hard fail.
+    """
+    sidecar = os.path.splitext(path)[0] + ".layers.json"
+    if not os.path.isfile(sidecar):
+        return None, None, []
+    try:
+        with open(sidecar, encoding="utf-8") as fh:
+            meta = json.load(fh)
+        if meta.get("version") != 1:
+            raise ValueError("unsupported foreground metadata version")
+        with open(path, "rb") as fh:
+            digest = hashlib.sha256(fh.read()).hexdigest()
+        if meta.get("image_sha256") != digest:
+            raise ValueError("foreground metadata does not match this image")
+        w, h = size
+        if (meta.get("width"), meta.get("height")) != (w, h):
+            raise ValueError("foreground metadata has the wrong image dimensions")
+        regions = meta.get("foreground")
+        if not isinstance(regions, list) or len(regions) > 128:
+            raise ValueError("foreground regions must be a list of at most 128 items")
+        worlds = meta.get("worlds", [])
+        if not isinstance(worlds, list) or len(worlds) > 8:
+            raise ValueError("invalid world layer metadata")
+        for world in worlds:
+            values = [float(world[k]) for k in ("x","y","w","h")]
+            if world.get("kind") not in {"video","image","map"} or not world.get("source") or not all(math.isfinite(v) for v in values):
+                raise ValueError("invalid world layer")
+            x,y,ww,hh=values
+            if x < 0 or y < 0 or ww <= 0 or hh <= 0 or x+ww > w+1 or y+hh > h+1:
+                raise ValueError("world bounds escape the image")
+        mask = Image.new("L", (w, h))
+        draw = ImageDraw.Draw(mask)
+        for region in regions:
+            if region.get("role") not in {"title", "photo", "icon", "label", "presenter", "caption", "brand", "info"}:
+                raise ValueError("unknown foreground role")
+            x, y, rw, rh = [float(region[k]) for k in ("x", "y", "w", "h")]
+            if not all(math.isfinite(v) for v in (x, y, rw, rh)):
+                raise ValueError("non-finite foreground coordinates")
+            if x < 0 or y < 0 or rw <= 0 or rh <= 0 or x + rw > w + 1 or y + rh > h + 1:
+                raise ValueError("foreground bounds escape the image")
+            draw.rectangle((max(0, x - 2), max(0, y - 2), min(w - 1, x + rw + 2), min(h - 1, y + rh + 2)), fill=255)
+        if (np.asarray(mask) > 0).mean() > 0.65:
+            raise ValueError("foreground metadata covers too much of the image")
+        mask = mask.resize((target[1], target[0]), Image.Resampling.NEAREST)
+        blocked = np.asarray(mask) > 0
+        # Sobel's 3x3 neighbourhood must not sample the edge of a foreground box.
+        padded = np.pad(blocked, 1, mode="edge")
+        blocked = np.logical_or.reduce([padded[dy:dy + target[0], dx:dx + target[1]] for dy in range(3) for dx in range(3)])
+        return blocked, None, worlds
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
+        return None, str(exc), []
+
+
+def subject_edge_ratio(edges, focus_box):
+    """Compare detail outside the declared subject with detail inside it.
+
+    Bounds are normalized to the actual frame. The legacy center ROI remains
+    the default, and other color/contrast/depth gates are unaffected.
+    """
+    x, y, width, height = map(float, focus_box)
+    if not all(math.isfinite(v) for v in (x, y, width, height)) or min(x, y) < 0 or min(width, height) <= 0 or x + width > 1.000001 or y + height > 1.000001 or not 0.1 <= width * height <= 0.5:
+        raise ValueError("invalid subject focus box")
+    h, w = edges.shape
+    x0, y0 = int(x * w), int(y * h)
+    x1, y1 = min(w, round((x + width) * w)), min(h, round((y + height) * h))
+    outside = np.ones((h, w), dtype=bool)
+    outside[y0:y1, x0:x1] = False
+    return float(edges[outside].mean() / max(float(edges[y0:y1, x0:x1].mean()), 1e-6))
+
+
+def analyze_image(path: str, accent_hex: str, focus_box=None) -> ImageReport:
     rep = ImageReport(path=path)
     im = Image.open(path).convert("RGB")
     # downscale for speed
@@ -169,6 +247,9 @@ def analyze_image(path: str, accent_hex: str) -> ImageReport:
     H, S, V = hsv[..., 0], hsv[..., 1], hsv[..., 2]
     gray = 0.299 * arr[..., 0] + 0.587 * arr[..., 1] + 0.114 * arr[..., 2]
     edges = sobel_mag(gray)
+    foreground, foreground_error, worlds = foreground_mask(path, (w, h), (hs, ws))
+    if foreground_error:
+        rep.findings.append(Finding("D3meta", "hard", False, foreground_error))
 
     # subsample for k-means
     flat = arr.reshape(-1, 3)
@@ -212,6 +293,8 @@ def analyze_image(path: str, accent_hex: str) -> ImageReport:
     peri_mask[cy0:cy1, cx0:cx1] = False
     peri_edge = edges[peri_mask].mean()
     edge_ratio = peri_edge / max(center_edge, 1e-6)
+    if focus_box is not None:
+        edge_ratio = subject_edge_ratio(edges, focus_box)
 
     # double-detail: split into 2x2 tiles, count tiles with high edge
     tile_h, tile_w = hs // 2, ws // 2
@@ -273,10 +356,23 @@ def analyze_image(path: str, accent_hex: str) -> ImageReport:
     else:
         p20, med_c = 21.0, 21.0
 
+    large_worlds = [layer for layer in worlds if layer["w"] * layer["h"] >= w * h * 0.20]
+    duplicated_worlds = len(large_worlds) > 1
+    full_frame_footage = len(large_worlds) == 1 and large_worlds[0]["kind"] in {"video", "image"} and large_worlds[0]["w"] * large_worlds[0]["h"] >= w * h * 0.98
+
     # Far-band detail (single-world check): edge density of the band just below the chrome row
     # (y 11-28% of H) vs the focal center. A second sharp background layer keeps this high.
     fb0, fb1 = int(hs * 0.11), int(hs * 0.28)
-    far_band_edge = float(edges[fb0:fb1, :].mean())
+    raw_far_band_edge = float(edges[fb0:fb1, :].mean())
+    far_band_edge = raw_far_band_edge
+    far_background_fraction = 1.0
+    if foreground is not None:
+        background = ~foreground[fb0:fb1, :]
+        far_background_fraction = float(background.mean())
+        if far_background_fraction < 0.25:
+            rep.findings.append(Finding("D3meta", "hard", False, "too little distant background remains to assess"))
+        else:
+            far_band_edge = float(edges[fb0:fb1, :][background].mean())
     far_band_ratio = far_band_edge / max(center_edge, 1e-6)
     # §5.1 explicitly allows ONE continuous world: detail running unbroken
     # top→bottom (a full-frame photo / map). D3 only targets a second sharp
@@ -287,7 +383,7 @@ def analyze_image(path: str, accent_hex: str) -> ImageReport:
         float(edges[k * hs // nbands : (k + 1) * hs // nbands, :].mean())
         for k in range(nbands)
     ]
-    continuous = all(e >= 0.45 * max(center_edge, 1e-6) for e in band_edges) and far_band_edge > 0.08
+    continuous = all(e >= 0.45 * max(center_edge, 1e-6) for e in band_edges) and raw_far_band_edge > 0.08
     # A second sharp layer must itself be sharp: a far band under edge 0.10
     # reads as soft distance / blur, not a pasted detailed layer.
     sharp_far = far_band_edge >= 0.10
@@ -309,6 +405,11 @@ def analyze_image(path: str, accent_hex: str) -> ImageReport:
         "high_tiles": high_tiles,
         "atm_s_ratio": atm_ratio,
         "far_band_ratio": far_band_ratio,
+        "far_band_raw_ratio": raw_far_band_edge / max(center_edge, 1e-6),
+        "far_background_fraction": far_background_fraction,
+        "foreground_metadata": foreground is not None,
+        "full_frame_footage": full_frame_footage,
+        "large_world_layers": len(large_worlds),
         "dark_block_pct": dark_block_pct,
         "dark_pct": dark_pct,
         "mean_v": float(V.mean()),
@@ -340,8 +441,8 @@ def analyze_image(path: str, accent_hex: str) -> ImageReport:
     add(
         "D3",
         "hard",
-        continuous or not sharp_far or far_band_ratio <= 0.30,
-        f"far-band/center edge={far_band_ratio:.2f} (fail if >0.30: second sharp layer; exempt: {continuous}, single continuous world)",
+        not duplicated_worlds and (full_frame_footage or continuous or not sharp_far or far_band_ratio <= 0.30),
+        f"far-background/center edge={far_band_ratio:.2f} raw={raw_far_band_edge / max(center_edge, 1e-6):.2f} background_sample={far_background_fraction:.0%} full_footage={full_frame_footage} worlds={len(large_worlds)} (fail if >0.30: second sharp layer; exempt: {continuous}, single continuous world)",
     )
     add("A1", "soft", atm_ratio <= 0.95, f"far/near S={atm_ratio:.2f} (warn if >0.95; want atmosphere)")
     # A visible dark chip covers well over 3% of the frame; under that the dark
@@ -383,6 +484,7 @@ def main() -> int:
     ap.add_argument("--dir", default=None, help="Directory to scan")
     ap.add_argument("--glob", default="*.png", dest="pattern", help="Glob under --dir")
     ap.add_argument("--accent", default="#D6EB00", help="Brand accent hex")
+    ap.add_argument("--focus-box", nargs=4, type=float, metavar=("X", "Y", "W", "H"), help="Normalized subject box for peripheral sharpness only")
     args = ap.parse_args()
 
     paths: List[str] = expand_paths(list(args.images))
@@ -406,13 +508,15 @@ def main() -> int:
     if len(paths) < MIN_STILLS:
         print(f"[taste] WARN: only {len(paths)} still(s); rules/taste.md requires >= {MIN_STILLS} at distinct shots.", file=sys.stderr)
 
-    reports = [analyze_image(p, args.accent) for p in paths]
+    reports = [analyze_image(p, args.accent, args.focus_box) for p in paths]
     hard = 0
     soft = 0
     print("=" * 72)
     print("HARMONY CHECK — measurable-aesthetics-gate")
     print(f"accent={args.accent}  images={len(reports)}")
     print("=" * 72)
+    if args.focus_box:
+        print("Sharpness focus: actual subject box", args.focus_box, "(all other gates unchanged)")
 
     for r in reports:
         print(f"\n## {os.path.basename(r.path)}")

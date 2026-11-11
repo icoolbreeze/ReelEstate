@@ -46,10 +46,10 @@ def resolve_project_dir(arg: str) -> Path:
         cand = (Path.cwd() / p)
         p = cand if cand.exists() else (REPO_ROOT / p)
     p = p.resolve()
-    if p.is_file() and p.name == "project.json":
+    if p.is_file() and p.name in ("episode.yaml", "episode.json", "compliance.json"):
         p = p.parent
-    if not (p / "project.json").exists():
-        raise SystemExit(f"错误：找不到 {p / 'project.json'}。用法示例：projects/rental/2026-10-03-lvcheng-2b1l")
+    if not (p / "episode.yaml").exists() or not (p / "episode.json").exists():
+        raise SystemExit("错误：只接受 episode.yaml + episode.json 视频工程，如 projects/listing/ep02-zidong")
     return p
 
 
@@ -91,3 +91,4 @@ def strip_comments(obj):
     if isinstance(obj, list):
         return [strip_comments(v) for v in obj]
     return obj
+
